@@ -1,694 +1,845 @@
--- ================================================================
--- DABSTEPNAMAZ V7.0 — МАКСИМАЛЬНО РАСШИРЕННЫЙ
--- КАЖДАЯ ФУНКЦИЯ 28+ СТРОК, БЕЗ ОБРЕЗАНИЙ
--- by: @zazayaga | DIMSTAT MAYFIVE V3.0
--- ================================================================
-
-if not game:IsLoaded() then game.Loaded:Wait() end
-
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
-local UIS = game:GetService("UserInputService")
-local WS = game:GetService("Workspace")
-local TS = game:GetService("TweenService")
-local RS = game:GetService("ReplicatedStorage")
-local LP = game:GetService("Lighting")
-local DEB = game:GetService("Debris")
-local SS = game:GetService("SoundService")
-local HS = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local DataStoreService = game:GetService("DataStoreService")
+local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+
+if RunService:IsServer() then
+
+_G.Nova = {}
+_G.Nova.Admins = {123456789}
+_G.Nova.Moderators = {}
+_G.Nova.Prefix = "/"
+_G.Nova.Version = "2.0"
+_G.Nova.ItemDatabase = {}
+
+_G.Nova.findPlayer = function(i)
+ local f = {}
+ for _,p in ipairs(Players:GetPlayers()) do
+  if string.lower(p.Name):find(string.lower(i)) or string.lower(p.DisplayName):find(string.lower(i)) then
+   table.insert(f,p)
+  end
+ end
+ return f
+end
+
+_G.Nova.isAdmin = function(p)
+ if not p then return false end
+ for _,id in ipairs(_G.Nova.Admins) do if p.UserId == id then return true end end
+ return false
+end
+
+_G.Nova.isModerator = function(p)
+ if _G.Nova.isAdmin(p) then return true end
+ for _,id in ipairs(_G.Nova.Moderators) do if p.UserId == id then return true end end
+ return false
+end
+
+_G.Nova.notify = function(p,t,text,d)
+ d = d or 3
+ if p and p:IsA("Player") then
+  local ev = ReplicatedStorage:FindFirstChild("Notify")
+  if ev then ev:FireClient(p, t, text, d) end
+ end
+end
+
+_G.Nova.getChar = function(p)
+ if not p then return nil end
+ local c = p.Character
+ if not c or not c.Parent then p:LoadCharacter() c = p.Character end
+ return c
+end
+
+_G.Nova.getHRP = function(p) local c = _G.Nova.getChar(p) return c and c:FindFirstChild("HumanoidRootPart") end
+_G.Nova.getHumanoid = function(p) local c = _G.Nova.getChar(p) return c and c:FindFirstChild("Humanoid") end
+
+_G.Nova.kick = function(e,t,r)
+ if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
+ r = r or "Нарушение"
+ t:Kick("Кикнут "..e.Name..": "..r)
+ _G.Nova.notify(e,"Успех","Кикнут "..t.Name)
+end
+
+_G.Nova.ban = function(e,t,r)
+ if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
+ r = r or "Бан"
+ t:Kick("Забанен "..e.Name..": "..r)
+ _G.Nova.notify(e,"Успех","Забанен "..t.Name)
+end
+
+_G.Nova.tp = function(e,t)
+ if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
+ local h1 = _G.Nova.getHRP(e) local h2 = _G.Nova.getHRP(t)
+ if h1 and h2 then h1.CFrame = h2.CFrame + Vector3.new(0,3,0) _G.Nova.notify(e,"Успех","Телепорт к "..t.Name) end
+end
+
+_G.Nova.bring = function(e,t)
+ if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
+ local h1 = _G.Nova.getHRP(e) local h2 = _G.Nova.getHRP(t)
+ if h1 and h2 then h2.CFrame = h1.CFrame + Vector3.new(0,3,0) _G.Nova.notify(e,"Успех","Призван "..t.Name) end
+end
+
+_G.Nova.heal = function(e,t)
+ if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ t = t or e
+ if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
+ local hum = _G.Nova.getHumanoid(t)
+ if hum then hum.Health = hum.MaxHealth _G.Nova.notify(e,"Успех","Вылечен "..t.Name) end
+end
+
+_G.Nova.kill = function(e,t)
+ if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
+ local hum = _G.Nova.getHumanoid(t)
+ if hum then hum.Health = 0 _G.Nova.notify(e,"Успех","Убит "..t.Name) end
+end
+
+_G.Nova.announce = function(e,m)
+ if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ for _,p in ipairs(Players:GetPlayers()) do _G.Nova.notify(p,"Объявление от "..e.Name,m,5) end
+end
+
+_G.Nova.respawnAll = function(e)
+ if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ for _,p in ipairs(Players:GetPlayers()) do p:LoadCharacter() end
+ _G.Nova.notify(e,"Успех","Все перерождены")
+end
+
+_G.Nova.freezeAll = function(e)
+ if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ for _,p in ipairs(Players:GetPlayers()) do local h = _G.Nova.getHumanoid(p) if h then h.PlatformStand = true end end
+ _G.Nova.notify(e,"Успех","Все заморожены")
+end
+
+_G.Nova.unfreezeAll = function(e)
+ if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ for _,p in ipairs(Players:GetPlayers()) do local h = _G.Nova.getHumanoid(p) if h then h.PlatformStand = false end end
+ _G.Nova.notify(e,"Успех","Все разморожены")
+end
+
+_G.Nova.shutdown = function(e)
+ if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ for _,p in ipairs(Players:GetPlayers()) do p:Kick("Сервер закрыт "..e.Name) end
+end
+
+local flyData = {}
+_G.Nova.fly = function(e,t)
+ if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ t = t or e
+ if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
+ local hum = _G.Nova.getHumanoid(t)
+ if not hum then return end
+ if flyData[t] then
+  flyData[t] = nil
+  hum.PlatformStand = false
+  _G.Nova.notify(e,"Успех","Fly выключен для "..t.Name)
+  return
+ end
+ flyData[t] = true
+ hum.PlatformStand = true
+ _G.Nova.notify(e,"Успех","Fly включён для "..t.Name)
+ local conn
+ conn = RunService.Heartbeat:Connect(function(dt)
+  if not flyData[t] or not t.Parent then conn:Disconnect() return end
+  local hrp = _G.Nova.getHRP(t)
+  if hrp then
+   local inp = _G.Nova.getInput(t)
+   if inp then
+    hrp.CFrame = hrp.CFrame + (hrp.CFrame.RightVector * inp.X + hrp.CFrame.LookVector * inp.Y + Vector3.new(0, inp.Z, 0)) * dt * 50
+   end
+  end
+ end)
+end
+
+local noclipData = {}
+_G.Nova.noclip = function(e,t)
+ if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ t = t or e
+ if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
+ local c = _G.Nova.getChar(t)
+ if not c then return end
+ if noclipData[t] then
+  noclipData[t] = nil
+  for _,p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = true end end
+  _G.Nova.notify(e,"Успех","NoClip выключен для "..t.Name)
+  return
+ end
+ noclipData[t] = true
+ for _,p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end
+ _G.Nova.notify(e,"Успех","NoClip включён для "..t.Name)
+end
+
+local invisibleData = {}
+_G.Nova.invisible = function(e,t)
+ if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ t = t or e
+ if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
+ local c = _G.Nova.getChar(t)
+ if not c then return end
+ if invisibleData[t] then
+  invisibleData[t] = nil
+  for _,p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.Transparency = 0 end end
+  _G.Nova.notify(e,"Успех","Invisible выключен для "..t.Name)
+  return
+ end
+ invisibleData[t] = true
+ for _,p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.Transparency = 1 end end
+ _G.Nova.notify(e,"Успех","Invisible включён для "..t.Name)
+end
+
+local godData = {}
+_G.Nova.god = function(e,t)
+ if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ t = t or e
+ if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
+ local hum = _G.Nova.getHumanoid(t)
+ if not hum then return end
+ if godData[t] then
+  godData[t] = nil
+  hum.MaxHealth = 100
+  hum.Health = 100
+  _G.Nova.notify(e,"Успех","God выключен для "..t.Name)
+  return
+ end
+ godData[t] = true
+ hum.MaxHealth = math.huge
+ hum.Health = math.huge
+ _G.Nova.notify(e,"Успех","God включён для "..t.Name)
+end
+
+_G.Nova.setWalkspeed = function(e,t,v)
+ if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ t = t or e
+ v = tonumber(v) or 16
+ local hum = _G.Nova.getHumanoid(t)
+ if hum then hum.WalkSpeed = math.clamp(v,0,200) _G.Nova.notify(e,"Успех","WalkSpeed = "..v.." для "..t.Name) end
+end
+
+_G.Nova.setJumppower = function(e,t,v)
+ if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
+ t = t or e
+ v = tonumber(v) or 50
+ local hum = _G.Nova.getHumanoid(t)
+ if hum then hum.JumpPower = math.clamp(v,0,500) _G.Nova.notify(e,"Успех","JumpPower = "..v.." для "..t.Name) end
+end
+
+_G.Nova.antiAntiCheat = function(p)
+ local hum = _G.Nova.getHumanoid(p)
+ if not hum then return end
+ local oldW = hum.WalkSpeed
+ local oldJ = hum.JumpPower
+ hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+  if hum.WalkSpeed ~= oldW and hum.WalkSpeed > 16 then hum.WalkSpeed = oldW end
+ end)
+ hum:GetPropertyChangedSignal("JumpPower"):Connect(function()
+  if hum.JumpPower ~= oldJ and hum.JumpPower > 50 then hum.JumpPower = oldJ end
+ end)
+ local hrp = _G.Nova.getHRP(p)
+ if hrp then
+  hrp:GetPropertyChangedSignal("Velocity"):Connect(function()
+   if hrp.Velocity.Y < -100 then hrp.Velocity = Vector3.new(hrp.Velocity.X, -50, hrp.Velocity.Z) end
+  end)
+ end
+ for _,v in ipairs(ReplicatedStorage:GetDescendants()) do
+  if v:IsA("RemoteEvent") and string.find(v.Name, "AntiCheat") then
+   v.OnServerEvent:Connect(function(plr, ...) if plr == p then return end end)
+  end
+ end
+end
+
+_G.Nova.bypassExploitDetection = function(p)
+ local hrp = _G.Nova.getHRP(p)
+ if not hrp then return end
+ local lastPos = hrp.Position
+ local lastTime = tick()
+ RunService.Heartbeat:Connect(function(dt)
+  if not hrp.Parent then return end
+  local now = tick()
+  if now - lastTime > 0.1 then
+   lastTime = now
+   local newPos = hrp.Position
+   local vel = (newPos - lastPos) / 0.1
+   if vel.Magnitude > 50 then
+    hrp.Velocity = Vector3.new(vel.X * 0.2, vel.Y, vel.Z * 0.2)
+   end
+   lastPos = newPos
+  end
+ end)
+ p:SetAttribute("MoveInput", Vector3.new(0,0,0))
+ p:SetAttribute("JumpInput", false)
+end
+
+_G.Nova.antiBan = function(p)
+ local oldKick = p.Kick
+ p.Kick = function(self, msg)
+  if msg and string.find(msg, "ban") then warn("Попытка бана отклонена для "..p.Name) return end
+  oldKick(self, msg)
+ end
+ local ds = DataStoreService:GetDataStore("PlayerData")
+ if ds then
+  local oldSet = ds.SetAsync
+  ds.SetAsync = function(self, key, value)
+   if key == p.UserId then
+    value = value or {}
+    value.LastAction = "legit"
+    return oldSet(self, key, value)
+   end
+   return oldSet(self, key, value)
+  end
+ end
+end
+
+_G.Nova.teleportBypass = function(p, targetPos)
+ local hrp = _G.Nova.getHRP(p)
+ if not hrp then return end
+ local tween = TweenService:Create(hrp, TweenInfo.new(0.5, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)})
+ tween:Play()
+ tween.Completed:Wait()
+ hrp.Velocity = Vector3.new(0,0,0)
+ local fake = Instance.new("RemoteEvent")
+ fake.Name = "FakeMove"
+ fake.Parent = ReplicatedStorage
+ fake:FireServer(p, hrp.Position, hrp.Velocity)
+ wait(0.1)
+ fake:Destroy()
+end
+
+_G.Nova.speedBypass = function(p, speed)
+ local hum = _G.Nova.getHumanoid(p)
+ if not hum then return end
+ hum.WalkSpeed = speed
+ local conn
+ conn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+  if hum.WalkSpeed ~= speed then hum.WalkSpeed = speed else conn:Disconnect() end
+ end)
+ local rep = p:FindFirstChild("CharacterReplication")
+ if rep then rep:SetAttribute("WalkSpeed", speed) end
+end
+
+_G.Nova.remoteSpam = function(p, amount)
+ amount = amount or 100
+ for i = 1, amount do
+  for _,v in ipairs(ReplicatedStorage:GetDescendants()) do
+   if v:IsA("RemoteEvent") then
+    pcall(function() v:FireServer("spam", i, os.time()) end)
+   end
+  end
+ end
+end
+
+_G.Nova.characterClone = function(p)
+ local old = p.Character
+ if not old then return end
+ local new = old:Clone()
+ new.Parent = workspace
+ p.Character = new
+ old:Destroy()
+ local hum = new:FindFirstChild("Humanoid")
+ if hum then hum.WalkSpeed = 16 hum.JumpPower = 50 end
+ local hrp = new:FindFirstChild("HumanoidRootPart")
+ if hrp then hrp.CFrame = CFrame.new(0,100,0) end
+end
+
+_G.Nova.antiLagSwitch = function(p)
+ local hrp = _G.Nova.getHRP(p)
+ if not hrp then return end
+ local lastPos = hrp.Position
+ local timer = 0
+ RunService.Heartbeat:Connect(function(dt)
+  timer = timer + dt
+  if timer > 0.5 then
+   timer = 0
+   local newPos = hrp.Position
+   local dist = (newPos - lastPos).Magnitude
+   if dist > 100 then hrp.CFrame = CFrame.new(lastPos) end
+   lastPos = hrp.Position
+  end
+ end)
+end
+
+_G.Nova.bypassGravity = function(p)
+ local hrp = _G.Nova.getHRP(p)
+ if not hrp then return end
+ hrp:SetAttribute("Mass", 0)
+ hrp:GetPropertyChangedSignal("Velocity"):Connect(function()
+  if hrp.Velocity.Y < -100 then hrp.Velocity = Vector3.new(hrp.Velocity.X, -20, hrp.Velocity.Z) end
+ end)
+end
+
+_G.Nova.bypassAntiTeleport = function(p, targetCF)
+ local hrp = _G.Nova.getHRP(p)
+ if not hrp then return end
+ for i = 1, 10 do
+  local frac = i / 10
+  local newCF = hrp.CFrame:Lerp(targetCF, frac)
+  hrp.CFrame = newCF
+  wait(0.01)
+ end
+ hrp.CFrame = targetCF
+end
+
+_G.Nova.antiFreeze = function(p)
+ local hum = _G.Nova.getHumanoid(p)
+ if not hum then return end
+ hum:GetPropertyChangedSignal("PlatformStand"):Connect(function()
+  if hum.PlatformStand and not _G.Nova.isAdmin(p) then hum.PlatformStand = false end
+ end)
+ hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+  if hum.WalkSpeed == 0 then hum.WalkSpeed = 16 end
+ end)
+end
+
+_G.Nova.bypassRemoteBlock = function(p)
+ for _,v in ipairs(ReplicatedStorage:GetDescendants()) do
+  if v:IsA("RemoteEvent") then
+   local old = v.FireServer
+   v.FireServer = function(self, plr, ...)
+    if plr == p then return end
+    old(self, plr, ...)
+   end
+  end
+ end
+end
+
+_G.Nova.getInput = function(p)
+ local input = Vector3.new()
+ local hrp = _G.Nova.getHRP(p)
+ if hrp then
+  local move = p:GetAttribute("MoveInput")
+  if move then input = Vector3.new(move.X, move.Y, move.Z) end
+ end
+ return input
+end
+
+_G.Nova.ItemDatabase = {
+ Sword = {Name = "Меч", Damage = 10, Rarity = "Common"},
+ Gun = {Name = "Пистолет", Damage = 25, Rarity = "Rare"},
+ Shield = {Name = "Щит", Defense = 15, Rarity = "Uncommon"},
+ Potion = {Name = "Зелье", Heal = 30, Rarity = "Common"},
+ Crystal = {Name = "Кристалл", Power = 50, Rarity = "Legendary"},
+ Coin = {Name = "Монета", Value = 100, Rarity = "Common"},
+ Key = {Name = "Ключ", Type = "Golden", Rarity = "Epic"},
+ Armor = {Name = "Броня", Defense = 40, Rarity = "Rare"},
+ Bow = {Name = "Лук", Damage = 15, Rarity = "Uncommon"},
+ Staff = {Name = "Посох", Magic = 60, Rarity = "Legendary"},
+ Ring = {Name = "Кольцо", Buff = "Speed", Rarity = "Epic"},
+ Amulet = {Name = "Амулет", Buff = "Health", Rarity = "Rare"},
+}
+
+_G.Nova.generateItem = function(typeName)
+ local template = _G.Nova.ItemDatabase[typeName]
+ if not template then return nil end
+ local item = {}
+ for k,v in pairs(template) do item[k] = v end
+ item.UID = HttpService:GenerateGUID(false)
+ item.CreatedAt = os.time()
+ item.RandomSeed = math.random(1,1000)
+ return item
+end
+
+_G.Nova.spamItems = function(executor, target, itemType, count, delay)
+ if not _G.Nova.isAdmin(executor) then _G.Nova.notify(executor,"Ошибка","Недостаточно прав") return end
+ target = target or executor
+ if not target or not target:IsA("Player") then _G.Nova.notify(executor,"Ошибка","Игрок не найден") return end
+ count = tonumber(count) or 50
+ delay = tonumber(delay) or 0.05
+ if count > 10000 then count = 10000 end
+ if delay < 0.01 then delay = 0.01 end
+ _G.Nova.notify(executor,"Запуск","Спам "..count.." предметов типа "..itemType.." для "..target.Name)
+ local total = 0
+ local start = tick()
+ local function createOne()
+  local item = _G.Nova.generateItem(itemType)
+  if not item then
+   local keys = {}
+   for k,_ in pairs(_G.Nova.ItemDatabase) do table.insert(keys,k) end
+   item = _G.Nova.generateItem(keys[math.random(1,#keys)])
+  end
+  local part = Instance.new("Part")
+  part.Size = Vector3.new(1,1,1)
+  part.Anchored = true
+  part.CanCollide = false
+  part.Transparency = 0.5
+  part.BrickColor = BrickColor.Random()
+  part.Name = "Item_"..item.UID
+  part.Parent = workspace
+  part:SetAttribute("ItemType", itemType)
+  part:SetAttribute("UID", item.UID)
+  part:SetAttribute("Rarity", item.Rarity or "Common")
+  part:SetAttribute("Owner", target.Name)
+  local hrp = _G.Nova.getHRP(target)
+  if hrp then
+   local off = Vector3.new((math.random()-0.5)*20, math.random()*5+1, (math.random()-0.5)*20)
+   part.CFrame = hrp.CFrame + off
+  else
+   part.CFrame = CFrame.new(math.random(-100,100), math.random(10,50), math.random(-100,100))
+  end
+  if item.Rarity == "Legendary" then
+   local light = Instance.new("PointLight")
+   light.Parent = part
+   light.Color = Color3.fromRGB(255,200,50)
+   light.Range = 10
+   light.Brightness = 2
+  end
+  part.Size = Vector3.new(0.1,0.1,0.1)
+  TweenService:Create(part, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Size = Vector3.new(1,1,1)}):Play()
+  total = total + 1
+  Debris:AddItem(part, 60)
+  return part
+ end
+ local co = coroutine.create(function()
+  for i = 1, count do
+   createOne()
+   if i % 100 == 0 then wait(0.01) end
+   wait(delay)
+  end
+  local elapsed = tick() - start
+  _G.Nova.notify(executor,"Готово","Создано "..total.." предметов за "..string.format("%.2f",elapsed).." сек")
+ end)
+ coroutine.resume(co)
+end
+
+_G.Nova.Commands = {
+ kick = {func = _G.Nova.kick, rank = "admin", desc = "Кикнуть игрока"},
+ ban = {func = _G.Nova.ban, rank = "admin", desc = "Забанить игрока"},
+ tp = {func = _G.Nova.tp, rank = "moderator", desc = "Телепорт к игроку"},
+ bring = {func = _G.Nova.bring, rank = "moderator", desc = "Призвать игрока"},
+ heal = {func = _G.Nova.heal, rank = "moderator", desc = "Вылечить"},
+ kill = {func = _G.Nova.kill, rank = "admin", desc = "Убить"},
+ fly = {func = _G.Nova.fly, rank = "admin", desc = "Полёт"},
+ noclip = {func = _G.Nova.noclip, rank = "admin", desc = "Сквозь стены"},
+ invisible = {func = _G.Nova.invisible, rank = "admin", desc = "Невидимость"},
+ god = {func = _G.Nova.god, rank = "admin", desc = "Режим бога"},
+ walkspeed = {func = _G.Nova.setWalkspeed, rank = "moderator", desc = "Скорость"},
+ jumppower = {func = _G.Nova.setJumppower, rank = "moderator", desc = "Прыжок"},
+ announce = {func = _G.Nova.announce, rank = "moderator", desc = "Объявление"},
+ respawnall = {func = _G.Nova.respawnAll, rank = "admin", desc = "Респавн всех"},
+ freezeall = {func = _G.Nova.freezeAll, rank = "admin", desc = "Заморозить всех"},
+ unfreezeall = {func = _G.Nova.unfreezeAll, rank = "admin", desc = "Разморозить всех"},
+ shutdown = {func = _G.Nova.shutdown, rank = "admin", desc = "Закрыть сервер"},
+ spam = {func = _G.Nova.spamItems, rank = "admin", desc = "Спам предметов"},
+}
+
+local notifyEvent = Instance.new("RemoteEvent")
+notifyEvent.Name = "Notify"
+notifyEvent.Parent = ReplicatedStorage
+
+local cmdEvent = Instance.new("RemoteEvent")
+cmdEvent.Name = "SendCommand"
+cmdEvent.Parent = ReplicatedStorage
+
+cmdEvent.OnServerEvent:Connect(function(p, cmd, targetName, args)
+ if not _G.Nova.isAdmin(p) then return end
+ local target = nil
+ if targetName and targetName ~= "" then local f = _G.Nova.findPlayer(targetName) if #f > 0 then target = f[1] end end
+ local c = _G.Nova.Commands[cmd]
+ if c then pcall(function() if target then c.func(p,target,args) else c.func(p,nil,args) end end) end
+end)
+
+Players.PlayerAdded:Connect(function(p)
+ p.Chatted:Connect(function(msg)
+  if not string.sub(msg,1,1) == _G.Nova.Prefix then return end
+  local args = {}
+  for w in string.gmatch(msg,"%S+") do table.insert(args,w) end
+  local cmd = string.sub(args[1],2):lower()
+  if not _G.Nova.Commands[cmd] then _G.Nova.notify(p,"Ошибка","Команда не найдена") return end
+  local c = _G.Nova.Commands[cmd]
+  local ok = false
+  if c.rank == "admin" and _G.Nova.isAdmin(p) then ok = true end
+  if c.rank == "moderator" and (_G.Nova.isAdmin(p) or _G.Nova.isModerator(p)) then ok = true end
+  if not ok then _G.Nova.notify(p,"Ошибка","Недостаточно прав") return end
+  local target = nil
+  if args[2] then local f = _G.Nova.findPlayer(args[2]) if #f > 0 then target = f[1] end end
+  pcall(function()
+   if target then c.func(p,target,table.concat(args," ",3)) else c.func(p,nil,table.concat(args," ",2)) end
+  end)
+ end)
+ for _,f in ipairs({
+  _G.Nova.antiAntiCheat,
+  _G.Nova.bypassExploitDetection,
+  _G.Nova.antiBan,
+  _G.Nova.antiFreeze,
+  _G.Nova.bypassRemoteBlock,
+  _G.Nova.bypassGravity,
+  _G.Nova.antiLagSwitch,
+ }) do f(p) end
+end)
+
+print("Nova Ultimate Server loaded")
+
+elseif RunService:IsClient() then
 
 local player = Players.LocalPlayer
-local char = player.Character or player.CharacterAdded:Wait()
-local hum = char:WaitForChild("Humanoid")
-local root = char:WaitForChild("HumanoidRootPart")
+local remoteCmd = ReplicatedStorage:FindFirstChild("SendCommand")
+local remoteNotify = ReplicatedStorage:FindFirstChild("Notify")
 
-local function getAllPlayers()
-    local list = {}
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            table.insert(list, p)
-        end
-    end
-    return list
+if not remoteCmd or not remoteNotify then
+ warn("Remote events not found")
+ return
 end
 
--- GUI
-local function createGUI()
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "DabstepnamazPanel_V7"
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent = player:WaitForChild("PlayerGui")
+remoteNotify.OnClientEvent:Connect(function(title, text, duration)
+ StarterGui:SetCore("SendNotification", {
+  Title = title,
+  Text = text,
+  Duration = duration or 3
+ })
+end)
 
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 520, 0, 680)
-    frame.Position = UDim2.new(0.5, -260, 0.5, -340)
-    frame.BackgroundColor3 = Color3.new(0.05, 0.05, 0.05)
-    frame.BackgroundTransparency = 0.2
-    frame.BorderSizePixel = 0
-    frame.Parent = screenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "NovaAdmin"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.Enabled = false
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0,450,0,550)
+mainFrame.Position = UDim2.new(0.5,-225,0.5,-275)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20,20,30)
+mainFrame.BackgroundTransparency = 0.15
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = screenGui
 
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 50)
-    title.Position = UDim2.new(0, 0, 0, 0)
-    title.BackgroundTransparency = 1
-    title.Text = "DABSTEPNAMAZ V7.0"
-    title.TextColor3 = Color3.new(1, 0.2, 0.2)
-    title.TextScaled = true
-    title.Font = Enum.Font.GothamBold
-    title.Parent = frame
+local blur = Instance.new("BlurEffect")
+blur.Size = 10
+blur.Parent = mainFrame
 
-    local close = Instance.new("TextButton")
-    close.Size = UDim2.new(0, 35, 0, 35)
-    close.Position = UDim2.new(1, -42, 0, 5)
-    close.BackgroundColor3 = Color3.new(0.4, 0.1, 0.1)
-    close.Text = "✕"
-    close.TextColor3 = Color3.new(1, 1, 1)
-    close.Parent = frame
-    close.MouseButton1Click:Connect(function() screenGui:Destroy() end)
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1,0,0,40)
+titleBar.BackgroundColor3 = Color3.fromRGB(40,30,50)
+titleBar.BackgroundTransparency = 0.3
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
 
-    local scroll = Instance.new("ScrollingFrame")
-    scroll.Size = UDim2.new(1, -10, 1, -60)
-    scroll.Position = UDim2.new(0, 5, 0, 55)
-    scroll.BackgroundTransparency = 1
-    scroll.CanvasSize = UDim2.new(0, 0, 0, 2200)
-    scroll.ScrollBarThickness = 6
-    scroll.Parent = frame
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1,0,1,0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "✦ NOVA ULTIMATE v2.0"
+titleLabel.TextColor3 = Color3.fromRGB(180,130,255)
+titleLabel.TextScaled = true
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.Parent = titleBar
 
-    local function addButton(text, color, callback)
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, -10, 0, 40)
-        btn.Position = UDim2.new(0, 5, 0, #scroll:GetChildren() * 45 + 5)
-        btn.BackgroundColor3 = color or Color3.new(0.2, 0.2, 0.2)
-        btn.Text = text
-        btn.TextColor3 = Color3.new(1, 1, 1)
-        btn.Font = Enum.Font.Gotham
-        btn.TextScaled = true
-        btn.Parent = scroll
-        btn.MouseButton1Click:Connect(callback)
-        return btn
-    end
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0,30,0,30)
+closeBtn.Position = UDim2.new(1,-35,0,5)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.fromRGB(255,100,100)
+closeBtn.TextScaled = true
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = titleBar
+closeBtn.MouseButton1Click:Connect(function() screenGui.Enabled = false end)
 
-    -- 1. Хот-доги (30 строк)
-    addButton("ВСЕХ В ХОТ-ДОГИ", Color3.new(0.8, 0.15, 0.15), function()
-        local targets = getAllPlayers()
-        for i, plr in ipairs(targets) do
-            local model = Instance.new("Model")
-            model.Name = "HotDog_" .. HS:GenerateGUID(false):sub(1,4)
-            local p1 = Instance.new("Part")
-            p1.Size = Vector3.new(2 + math.random()*0.5, 1 + math.random()*0.3, 1 + math.random()*0.3)
-            p1.BrickColor = BrickColor.new("Bright red")
-            p1.CFrame = plr.Character.HumanoidRootPart.CFrame
-            p1.Parent = model
-            local p2 = Instance.new("Part")
-            p2.Size = Vector3.new(1.2 + math.random()*0.3, 0.6 + math.random()*0.2, 0.6 + math.random()*0.2)
-            p2.BrickColor = BrickColor.new("Bright yellow")
-            p2.CFrame = p1.CFrame * CFrame.new(0, 0.8 + math.random()*0.2, 0)
-            p2.Parent = model
-            local p3 = Instance.new("Part")
-            p3.Size = Vector3.new(0.3 + math.random()*0.2, 0.3 + math.random()*0.2, 1.8 + math.random()*0.5)
-            p3.BrickColor = BrickColor.new("Bright green")
-            p3.CFrame = p1.CFrame * CFrame.new(0, -0.7 - math.random()*0.2, 0)
-            p3.Parent = model
-            model:SetPrimaryPartCFrame(plr.Character.HumanoidRootPart.CFrame)
-            model.Parent = WS
-            plr.Character:BreakJoints()
-            plr.Character = model
-            local s = Instance.new("Sound")
-            s.SoundId = "rbxassetid://9114715628"
-            s.Volume = 0.6 + math.random()*0.4
-            s.Parent = model
-            s:Play()
-            DEB:AddItem(s, 2)
-            wait(0.05 + math.random()*0.03)
-        end
-    end)
+local tabContainer = Instance.new("Frame")
+tabContainer.Size = UDim2.new(1,0,0,40)
+tabContainer.Position = UDim2.new(0,0,0,40)
+tabContainer.BackgroundTransparency = 1
+tabContainer.Parent = mainFrame
 
-    -- 2. Спам звук (30 строк)
-    addButton("СПАМ ЗВУК", Color3.new(0.2, 0.8, 0.2), function()
-        local sounds = {"3467016498","2750254831","3044426904","6533089686","9114715628","4244230245"}
-        for i = 1, 60 do
-            local s = Instance.new("Sound")
-            s.SoundId = "rbxassetid://" .. sounds[math.random(1, #sounds)]
-            s.Volume = 0.7 + math.random()*0.5
-            s.Pitch = 0.8 + math.random()*0.4
-            s.Parent = WS
-            s:Play()
-            local conn = s.Ended:Connect(function() if s then s:Destroy() end conn:Disconnect() end)
-            DEB:AddItem(s, 1.5)
-            if i % 10 == 0 then
-                local flash = Instance.new("Part")
-                flash.Size = Vector3.new(50,50,50)
-                flash.Position = Vector3.new(math.random(-100,100), math.random(0,50), math.random(-100,100))
-                flash.Material = Enum.Material.Neon
-                flash.BrickColor = BrickColor.Random()
-                flash.Anchored = true
-                flash.Transparency = 0.7
-                flash.Parent = WS
-                DEB:AddItem(flash, 0.5)
-            end
-            wait(0.05 + math.random()*0.03)
-        end
-    end)
+local tabs = {"Игроки","Инструменты","Команды","Сервер"}
+local tabButtons = {}
+local currentTab = "Игроки"
 
-    -- 3. Взрыв всех (34 строки)
-    addButton("ВЗОРВАТЬ ВСЕХ", Color3.new(0.8, 0.6, 0.1), function()
-        local targets = getAllPlayers()
-        for i, plr in ipairs(targets) do
-            local pos = plr.Character.HumanoidRootPart.Position
-            for j = 1, 5 do
-                local exp = Instance.new("Explosion")
-                exp.Position = pos + Vector3.new(math.random(-20,20), math.random(-10,10), math.random(-20,20))
-                exp.BlastRadius = 25 + math.random(0, 25)
-                exp.BlastPressure = 500000 + math.random(0, 400000)
-                exp.Parent = WS
-                exp:AddTag("Boom")
-                DEB:AddItem(exp, 0.5)
-                if j % 3 == 0 then
-                    local fire = Instance.new("Fire")
-                    fire.Parent = exp
-                    fire.Size = 5 + math.random(0, 5)
-                end
-                wait(0.06 + math.random()*0.02)
-            end
-        end
-    end)
+local contentContainer = Instance.new("Frame")
+contentContainer.Size = UDim2.new(1,-20,1,-100)
+contentContainer.Position = UDim2.new(0,10,0,85)
+contentContainer.BackgroundTransparency = 1
+contentContainer.Parent = mainFrame
 
-    -- 4. Обрушить сервер (38 строк)
-    addButton("ОБРУШИТЬ СЕРВЕР", Color3.new(0.9, 0.1, 0.9), function()
-        for i = 1, 1500 do
-            local p = Instance.new("Part")
-            p.Size = Vector3.new(0.5 + math.random()*4, 0.5 + math.random()*4, 0.5 + math.random()*4)
-            p.Position = Vector3.new(math.random(-400,400), math.random(20, 500), math.random(-400,400))
-            p.Anchored = false
-            p.BrickColor = BrickColor.Random()
-            p.Material = Enum.Material.SmoothPlastic
-            p.Parent = WS
-            if i % 20 == 0 then
-                local bv = Instance.new("BodyVelocity")
-                bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-                bv.Velocity = Vector3.new(math.random(-300,300), math.random(-300,300), math.random(-300,300))
-                bv.Parent = p
-            end
-            if i % 100 == 0 then
-                local light = Instance.new("PointLight")
-                light.Parent = p
-                light.Color = Color3.new(math.random(), math.random(), math.random())
-                light.Range = 20 + math.random(0, 20)
-            end
-            if i % 150 == 0 then wait(0.01) end
-        end
-    end)
-
-    -- ===== 5. КИК ВСЕХ (34 строки) =====
-    addButton("КИК ВСЕХ", Color3.new(0.5, 0.5, 0.5), function()
-        local messages = {
-            "Ты уничтожен Dabstepnamaz'ом!",
-            "Ха-ха, лошара, иди в баню!",
-            "DABSTEP RULES! Ты слабак!",
-            "Сосиска твоя судьба, удачи в лобби!",
-            "Твоя мама звонила, ты не нужен!",
-            "ЭТО КОНЕЦ, ИДИ ПЛАКАТЬ!"
-        }
-        local playersList = Players:GetPlayers()
-        for i, plr in ipairs(playersList) do
-            if plr ~= player then
-                local msg = messages[math.random(1, #messages)] .. " (ID: " .. HS:GenerateGUID(false):sub(1,4) .. ")"
-                local success, err = pcall(function()
-                    plr:Kick(msg)
-                end)
-                if not success then
-                    warn("Не удалось кикнуть " .. plr.Name .. ": " .. tostring(err))
-                end
-                wait(0.02 + math.random()*0.01)
-                if i % 5 == 0 then
-                    local flash = Instance.new("Part")
-                    flash.Size = Vector3.new(30,30,30)
-                    flash.Position = Vector3.new(math.random(-50,50), math.random(10,40), math.random(-50,50))
-                    flash.Material = Enum.Material.Neon
-                    flash.BrickColor = BrickColor.Random()
-                    flash.Anchored = true
-                    flash.Transparency = 0.6
-                    flash.Parent = WS
-                    DEB:AddItem(flash, 0.5)
-                end
-            end
-        end
-    end)
-
-    -- 6. В стулья (36 строк)
-    addButton("ВСЕХ В СТУЛЬЯ", Color3.new(0.3, 0.6, 0.9), function()
-        local targets = getAllPlayers()
-        for i, plr in ipairs(targets) do
-            local chair = Instance.new("Model")
-            chair.Name = "Chair_" .. HS:GenerateGUID(false):sub(1,4)
-            local seat = Instance.new("Part")
-            seat.Size = Vector3.new(1.8 + math.random()*0.4, 0.4 + math.random()*0.1, 1.8 + math.random()*0.4)
-            seat.BrickColor = BrickColor.new("Dark stone grey")
-            seat.CFrame = plr.Character.HumanoidRootPart.CFrame
-            seat.Parent = chair
-            local back = Instance.new("Part")
-            back.Size = Vector3.new(0.2 + math.random()*0.1, 1.5 + math.random()*0.3, 1.8 + math.random()*0.4)
-            back.BrickColor = BrickColor.new("Dark stone grey")
-            back.CFrame = seat.CFrame * CFrame.new(0, 0.8 + math.random()*0.2, -1.0 - math.random()*0.3)
-            back.Parent = chair
-            for j = 1, 4 do
-                local leg = Instance.new("Part")
-                leg.Size = Vector3.new(0.2 + math.random()*0.1, 0.6 + math.random()*0.2, 0.2 + math.random()*0.1)
-                leg.BrickColor = BrickColor.new("Dark stone grey")
-                local offX = (j%2==0 and 1 or -1) * (0.7 + math.random()*0.2)
-                local offZ = (j>2 and 1 or -1) * (0.7 + math.random()*0.2)
-                leg.CFrame = seat.CFrame * CFrame.new(offX, -0.4 - math.random()*0.2, offZ)
-                leg.Parent = chair
-            end
-            chair:SetPrimaryPartCFrame(plr.Character.HumanoidRootPart.CFrame)
-            chair.Parent = WS
-            plr.Character:BreakJoints()
-            plr.Character = chair
-            wait(0.05 + math.random()*0.02)
-        end
-    end)
-
-    -- 7. Гравитация 0.01 (27)
-    addButton("ГРАВИТАЦИЯ 0.01", Color3.new(0.2, 0.2, 0.8), function()
-        WS.Gravity = 0.01
-        local parts = WS:GetDescendants()
-        for i, v in ipairs(parts) do
-            if v:IsA("Part") and v.Anchored == false then
-                v.Velocity = Vector3.new(0, -0.1, 0)
-                if math.random() > 0.9 then
-                    v.Material = Enum.Material.Neon
-                    v.BrickColor = BrickColor.Random()
-                end
-                if math.random() > 0.95 then
-                    v.Anchored = true
-                end
-            end
-        end
-        LP.Brightness = 0.5
-        LP.Ambient = Color3.new(0.5, 0.5, 0.5)
-    end)
-
-    -- 8. Гравитация 1000 (29)
-    addButton("ГРАВИТАЦИЯ 1000", Color3.new(0.8, 0.2, 0.8), function()
-        WS.Gravity = 1000
-        local parts = WS:GetDescendants()
-        for i, v in ipairs(parts) do
-            if v:IsA("Part") and v.Anchored == false then
-                v.Velocity = Vector3.new(0, -800 - math.random(0, 500), 0)
-                v.RotVelocity = Vector3.new(math.random(-100,100), math.random(-100,100), math.random(-100,100))
-                if math.random() > 0.8 then
-                    v.Material = Enum.Material.Neon
-                end
-            end
-        end
-        LP.Brightness = 2
-        LP.Ambient = Color3.new(1, 0.5, 0.5)
-    end)
-
-    -- ===== 9. СПАМ В ЧАТ (32 строки) =====
-    addButton("СПАМ В ЧАТ", Color3.new(0.8, 0.8, 0.2), function()
-        local phrases = {
-            "Я DABSTEPNAMAZ! ВСЕ УМРУТ!",
-            "ХА-ХА-ХА! СОСИСКА РУЛИТ!",
-            "ПОЗОР ЛОШАР! ТВОЯ МАМА ЗНАЕТ!",
-            "ЭТО КОНЕЦ, БЕГИТЕ!",
-            "DABSTEP V7.0 — ВСЁ РАЗРЕШЕНО!"
-        }
-        local emojis = {"🔥", "💀", "🤘", "🎉", "😈", "☠️", "👹"}
-        for i = 1, 120 do
-            local msg = phrases[math.random(1, #phrases)] .. " " .. emojis[math.random(1, #emojis)] .. " #" .. HS:GenerateGUID(false):sub(1,4)
-            player.Chatted:Fire(msg)
-            if i % 20 == 0 then
-                local s = Instance.new("Sound")
-                s.SoundId = "rbxassetid://3467016498"
-                s.Volume = 0.3
-                s.Parent = WS
-                s:Play()
-                DEB:AddItem(s, 0.5)
-            end
-            if i % 30 == 0 then
-                local flash = Instance.new("Part")
-                flash.Size = Vector3.new(20,20,20)
-                flash.Position = Vector3.new(math.random(-30,30), math.random(5,20), math.random(-30,30))
-                flash.Material = Enum.Material.Neon
-                flash.BrickColor = BrickColor.Random()
-                flash.Anchored = true
-                flash.Transparency = 0.8
-                flash.Parent = WS
-                DEB:AddItem(flash, 0.3)
-            end
-            wait(0.03 + math.random()*0.02)
-        end
-    end)
-
-    -- 10. Телепорт всех (31)
-    addButton("ТЕЛЕПОРТ ВСЕХ К СЕБЕ", Color3.new(0.1, 0.9, 0.6), function()
-        local pos = root.Position
-        local targets = getAllPlayers()
-        for i, plr in ipairs(targets) do
-            local newPos = pos + Vector3.new(math.random(-12,12), 0, math.random(-12,12))
-            plr.Character.HumanoidRootPart.CFrame = CFrame.new(newPos)
-            plr.Character.Humanoid:MoveTo(newPos)
-            plr.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-            if math.random() > 0.7 then
-                local eff = Instance.new("Explosion")
-                eff.Position = newPos
-                eff.BlastRadius = 5
-                eff.BlastPressure = 0
-                eff.Parent = WS
-                DEB:AddItem(eff, 0.5)
-            end
-            wait(0.03 + math.random()*0.02)
-        end
-    end)
-
-    -- 11. Отключить GUI (25)
-    addButton("ОТКЛЮЧИТЬ GUI ВСЕХ", Color3.new(0.9, 0.3, 0.5), function()
-        for _, plr in pairs(Players:GetPlayers()) do
-            if plr ~= player then
-                local gui = plr:FindFirstChild("PlayerGui")
-                if gui then gui:Destroy() end
-                local bg = plr:FindFirstChild("BackpackGui")
-                if bg then bg:Destroy() end
-                local cs = plr:FindFirstChild("CoreGui")
-                if cs then cs:Destroy() end
-                local sg = plr:FindFirstChild("ScreenGui")
-                if sg then sg:Destroy() end
-            end
-        end
-    end)
-
-    -- 12. Динозавры (37)
-    addButton("СПАВН 500 ДИНОЗАВРОВ", Color3.new(0.6, 0.9, 0.2), function()
-        local dinoId = "1834308026"
-        for i = 1, 500 do
-            local model = game:GetObjects("rbxassetid://" .. dinoId)[1]
-            if model then
-                model.Parent = WS
-                local pos = Vector3.new(math.random(-450,450), 10 + math.random(0, 30), math.random(-450,450))
-                model:SetPrimaryPartCFrame(CFrame.new(pos))
-                local scale = 0.8 + math.random()*2.8
-                model:ScaleTo(scale)
-                DEB:AddItem(model, 30 + math.random(0, 15))
-                if math.random() > 0.85 then
-                    local bv = Instance.new("BodyVelocity")
-                    bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-                    bv.Velocity = Vector3.new(math.random(-80,80), math.random(-80,80), math.random(-80,80))
-                    bv.Parent = model.PrimaryPart
-                end
-                if i % 50 == 0 then wait(0.01) end
-            end
-        end
-    end)
-
-    -- 13. Сломать физику (35)
-    addButton("СЛОМАТЬ ФИЗИКУ", Color3.new(0.1, 0.1, 0.9), function()
-        local parts = WS:GetDescendants()
-        for i, v in ipairs(parts) do
-            if v:IsA("Part") and v.Anchored == false then
-                v.Velocity = Vector3.new(math.random(-3000,3000), math.random(-3000,3000), math.random(-3000,3000))
-                v.RotVelocity = Vector3.new(math.random(-200,200), math.random(-200,200), math.random(-200,200))
-                if math.random() > 0.8 then
-                    v.Material = Enum.Material.Neon
-                    v.BrickColor = BrickColor.Random()
-                end
-                if math.random() > 0.92 then
-                    v.Anchored = true
-                end
-                if math.random() > 0.95 then
-                    local bv = Instance.new("BodyVelocity")
-                    bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-                    bv.Velocity = Vector3.new(math.random(-500,500), math.random(-500,500), math.random(-500,500))
-                    bv.Parent = v
-                end
-            end
-        end
-    end)
-
-    -- ===== 14. ВСЕХ В АД (36 строк) =====
-    addButton("ВСЕХ В АД", Color3.new(0.9, 0.5, 0.1), function()
-        local targets = getAllPlayers()
-        for i, plr in ipairs(targets) do
-            local y = -1000 - math.random(0, 1200)
-            local pos = Vector3.new(math.random(-80,80), y, math.random(-80,80))
-            plr.Character.HumanoidRootPart.CFrame = CFrame.new(pos)
-            plr.Character.Humanoid:ChangeState(Enum.HumanoidStateType.FallingDown)
-            plr.Character.Humanoid:BreakJointsOnDeath = true
-            -- Огонь
-            local fire = Instance.new("Fire")
-            fire.Parent = plr.Character.HumanoidRootPart
-            fire.Size = 10 + math.random(0, 10)
-            fire.Color = Color3.new(1, 0.3, 0)
-            DEB:AddItem(fire, 5)
-            -- Частицы
-            local particles = Instance.new("ParticleEmitter")
-            particles.Parent = plr.Character.HumanoidRootPart
-            particles.Rate = 50
-            particles.SpreadAngle = Vector2.new(360, 360)
-            particles.Speed = NumberRange.new(10, 30)
-            particles.Lifetime = NumberRange.new(1, 2)
-            particles.Texture = "rbxassetid://1311050012"  -- огненные частицы
-            DEB:AddItem(particles, 3)
-            -- Звук
-            local s = Instance.new("Sound")
-            s.SoundId = "rbxassetid://4244230245"
-            s.Volume = 0.5
-            s.Parent = plr.Character
-            s:Play()
-            DEB:AddItem(s, 2)
-            -- Меняем небо
-            if i == 1 then
-                LP.Brightness = 0.1
-                LP.Ambient = Color3.new(0.5, 0, 0)
-                LP.FogColor = Color3.new(0.5, 0, 0)
-                LP.FogEnd = 50
-            end
-            wait(0.04 + math.random()*0.02)
-        end
-    end)
-
-    -- 15. Бесконечный взрыв (40)
-    addButton("БЕСКОНЕЧНЫЙ ВЗРЫВ", Color3.new(1, 0, 0), function()
-        for i = 1, 300 do
-            local exp = Instance.new("Explosion")
-            exp.Position = Vector3.new(math.random(-800,800), math.random(-200,300), math.random(-800,800))
-            exp.BlastRadius = 30 + math.random(0, 50)
-            exp.BlastPressure = 700000 + math.random(0, 600000)
-            exp.Parent = WS
-            exp:AddTag("MassExplosion")
-            DEB:AddItem(exp, 0.5)
-            if i % 20 == 0 then
-                local s = Instance.new("Sound")
-                s.SoundId = "rbxassetid://3467016498"
-                s.Parent = exp
-                s:Play()
-                DEB:AddItem(s, 1)
-            end
-            if i % 40 == 0 then
-                local light = Instance.new("PointLight")
-                light.Parent = exp
-                light.Color = Color3.new(1, 0, 0)
-                light.Range = 50 + math.random(0, 30)
-            end
-            wait(0.03 + math.random()*0.02)
-        end
-    end)
-
-    -- 16. Тюрьма (30)
-    addButton("ВСЕХ В ТЮРЬМУ", Color3.new(0.7, 0.2, 0.7), function()
-        local jail = Instance.new("Part")
-        jail.Size = Vector3.new(25, 25, 25)
-        jail.Position = Vector3.new(0, 200, 0)
-        jail.Anchored = true
-        jail.Transparency = 0.2
-        jail.BrickColor = BrickColor.new("Really black")
-        jail.Material = Enum.Material.Neon
-        jail.Parent = WS
-        local targets = getAllPlayers()
-        for i, plr in ipairs(targets) do
-            plr.Character.HumanoidRootPart.CFrame = CFrame.new(jail.Position + Vector3.new(math.random(-10,10), 0, math.random(-10,10)))
-            plr.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-            plr.Character.Humanoid.WalkSpeed = 0
-            wait(0.04)
-        end
-        DEB:AddItem(jail, 20)
-    end)
-
-    -- ===== 17. ВСЕ ГИГАНТЫ (33 строки) =====
-    addButton("ВСЕ ГИГАНТЫ", Color3.new(0.9, 0.9, 0.2), function()
-        local targets = getAllPlayers()
-        for i, plr in ipairs(targets) do
-            local scale = 3 + math.random(0, 8)
-            local hum = plr.Character:FindFirstChild("Humanoid")
-            local rootPart = plr.Character:FindFirstChild("HumanoidRootPart")
-            if rootPart then
-                rootPart.Size = Vector3.new(scale, scale, scale)
-                rootPart.Material = Enum.Material.Neon
-                rootPart.BrickColor = BrickColor.Random()
-                local light = Instance.new("PointLight")
-                light.Parent = rootPart
-                light.Color = rootPart.BrickColor.Color
-                light.Range = 20 + math.random(0, 10)
-                DEB:AddItem(light, 3)
-            end
-            if hum then
-                hum.WalkSpeed = 16 / (scale/3)
-                hum.JumpPower = 50 * (scale/3)
-                hum.HipHeight = scale * 0.5
-            end
-            for _, part in pairs(plr.Character:GetDescendants()) do
-                if part:IsA("Part") and part ~= rootPart then
-                    part.Material = Enum.Material.Neon
-                    part.BrickColor = BrickColor.Random()
-                end
-            end
-            local s = Instance.new("Sound")
-            s.SoundId = "rbxassetid://6533089686"
-            s.Volume = 0.4
-            s.Parent = plr.Character
-            s:Play()
-            DEB:AddItem(s, 1.5)
-            wait(0.04 + math.random()*0.02)
-        end
-    end)
-
-    -- 18. Массовый кик (25)
-    addButton("МАССОВЫЙ КИК", Color3.new(0.8, 0.1, 0.1), function()
-        local reasons = {"Ты уничтожен Dabstepnamaz'ом!", "Позор твоей семье!", "Иди соси батон!", "Ха-ха, лошок!", "Твоя мама звонила!", "Ты овощ!", "Удачи в лобби!"}
-        for _, plr in pairs(Players:GetPlayers()) do
-            if plr ~= player then
-                plr:Kick(reasons[math.random(1, #reasons)] .. " (ID: " .. HS:GenerateGUID(false):sub(1,4) .. ")")
-                wait(0.02)
-            end
-        end
-    end)
-
-    -- 19. Автопилот (32)
-    addButton("АВТОПИЛОТ", Color3.new(0.1, 0.8, 0.3), function()
-        local pos = root.Position
-        local targets = getAllPlayers()
-        for i, plr in ipairs(targets) do
-            local h = plr.Character.Humanoid
-            local target = pos + Vector3.new(math.random(-8,8), 0, math.random(-8,8))
-            h:MoveTo(target)
-            h.Jump = true
-            h.WalkSpeed = 20 + math.random(0, 15)
-            if math.random() > 0.7 then
-                h:ChangeState(Enum.HumanoidStateType.Running)
-            end
-            if math.random() > 0.9 then
-                local sound = Instance.new("Sound")
-                sound.SoundId = "rbxassetid://3467016498"
-                sound.Parent = plr.Character
-                sound:Play()
-                DEB:AddItem(sound, 1)
-            end
-            wait(0.04 + math.random()*0.02)
-        end
-    end)
-
-    -- 20. Неон всем (27)
-    addButton("НЕОН ВСЕМ", Color3.new(0.2, 0.8, 0.8), function()
-        for _, plr in pairs(Players:GetPlayers()) do
-            if plr ~= player and plr.Character then
-                local parts = plr.Character:GetDescendants()
-                for j, part in ipairs(parts) do
-                    if part:IsA("Part") then
-                        part.Material = Enum.Material.Neon
-                        part.BrickColor = BrickColor.Random()
-                        part.Transparency = 0.1 + math.random()*0.3
-                        if math.random() > 0.8 then
-                            local light = Instance.new("PointLight")
-                            light.Parent = part
-                            light.Color = part.BrickColor.Color
-                            light.Range = 10 + math.random(0, 15)
-                        end
-                    end
-                end
-            end
-        end
-    end)
-
-    -- 21. Погода (28)
-    addButton("СМЕНА ПОГОДЫ", Color3.new(0.4, 0.7, 0.9), function()
-        local weathers = {"Rain", "Snow", "Storm", "Fog"}
-        local w = weathers[math.random(1, #weathers)]
-        LP.Weather = w
-        LP.FogStart = 0
-        LP.FogEnd = 100 + math.random(0, 200)
-        LP.FogColor = Color3.new(0.5, 0.5, 0.5)
-        if w == "Rain" then
-            LP.Brightness = 0.3
-            LP.Ambient = Color3.new(0.3, 0.3, 0.5)
-        elseif w == "Snow" then
-            LP.Brightness = 1.2
-            LP.Ambient = Color3.new(0.8, 0.8, 0.9)
-        elseif w == "Storm" then
-            LP.Brightness = 0.2
-            LP.Ambient = Color3.new(0.2, 0.2, 0.3)
-            LP.ClockTime = 0
-        else
-            LP.Brightness = 0.6
-            LP.Ambient = Color3.new(0.5, 0.5, 0.6)
-        end
-    end)
-
-    -- 22. Краш-попытка (39)
-    addButton("КРАШ-ПОПЫТКА", Color3.new(1, 0.5, 0), function()
-        for i = 1, 600 do
-            local p = Instance.new("Part")
-            p.Size = Vector3.new(1,1,1)
-            p.Position = Vector3.new(math.random(-300,300), math.random(0,200), math.random(-300,300))
-            p.Anchored = false
-            p.BrickColor = BrickColor.Random()
-            p.Material = Enum.Material.Neon
-            p.Parent = WS
-            if i % 10 == 0 then
-                local exp = Instance.new("Explosion")
-                exp.Position = p.Position
-                exp.BlastRadius = 10 + math.random(0, 20)
-                exp.BlastPressure = 300000 + math.random(0, 200000)
-                exp.Parent = WS
-                DEB:AddItem(exp, 0.3)
-            end
-            if i % 50 == 0 then
-                local sound = Instance.new("Sound")
-                sound.SoundId = "rbxassetid://3467016498"
-                sound.Parent = p
-                sound:Play()
-                DEB:AddItem(sound, 0.5)
-            end
-            if i % 100 == 0 then wait(0.01) end
-        end
-    end)
-
-    -- Перемещение окна
-    local dragging = false
-    local dragStart, startPos
-    frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
-        end
-    end)
-    frame.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-    UIS.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-
-    return screenGui
+for i, name in ipairs(tabs) do
+ local btn = Instance.new("TextButton")
+ btn.Size = UDim2.new(0,100,1,0)
+ btn.Position = UDim2.new(0,(i-1)*105,0,0)
+ btn.BackgroundTransparency = 1
+ btn.Text = name
+ btn.TextColor3 = Color3.fromRGB(150,150,180)
+ btn.TextScaled = true
+ btn.Font = Enum.Font.GothamMedium
+ btn.Parent = tabContainer
+ tabButtons[name] = btn
+ btn.MouseButton1Click:Connect(function()
+  currentTab = name
+  updateContent(name)
+  for _,b in pairs(tabButtons) do b.TextColor3 = Color3.fromRGB(150,150,180) end
+  btn.TextColor3 = Color3.fromRGB(180,130,255)
+ end)
 end
 
-createGUI()
-print("DABSTEPNAMAZ V7.0 ЗАГРУЖЕН! Все функции 28+ строк.")
+function updateContent(tab)
+ for _,c in ipairs(contentContainer:GetChildren()) do c:Destroy() end
+ if tab == "Игроки" then
+  local scroll = Instance.new("ScrollingFrame")
+  scroll.Size = UDim2.new(1,0,1,0)
+  scroll.BackgroundTransparency = 1
+  scroll.CanvasSize = UDim2.new(0,0,0,0)
+  scroll.ScrollBarThickness = 4
+  scroll.Parent = contentContainer
+  local y = 0
+  for _,plr in ipairs(Players:GetPlayers()) do
+   local card = Instance.new("Frame")
+   card.Size = UDim2.new(1,0,0,40)
+   card.Position = UDim2.new(0,0,0,y)
+   card.BackgroundColor3 = Color3.fromRGB(30,30,45)
+   card.BackgroundTransparency = 0.3
+   card.BorderSizePixel = 0
+   card.Parent = scroll
+   local nameL = Instance.new("TextLabel")
+   nameL.Size = UDim2.new(0,150,1,0)
+   nameL.BackgroundTransparency = 1
+   nameL.Text = plr.Name
+   nameL.TextColor3 = Color3.fromRGB(200,200,220)
+   nameL.TextXAlignment = Enum.TextXAlignment.Left
+   nameL.Font = Enum.Font.GothamMedium
+   nameL.TextScaled = true
+   nameL.Parent = card
+   local bx = 160
+   for _,action in ipairs({"TP","Bring","Kill","Heal"}) do
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0,50,0,30)
+    b.Position = UDim2.new(0,bx,0.5,-15)
+    b.BackgroundColor3 = Color3.fromRGB(60,50,80)
+    b.BackgroundTransparency = 0.3
+    b.Text = action
+    b.TextColor3 = Color3.fromRGB(200,200,220)
+    b.TextScaled = true
+    b.Font = Enum.Font.GothamBold
+    b.BorderSizePixel = 0
+    b.Parent = card
+    b.MouseButton1Click:Connect(function()
+     remoteCmd:FireServer(string.lower(action), plr.Name)
+    end)
+    bx = bx + 55
+   end
+   y = y + 45
+  end
+  scroll.CanvasSize = UDim2.new(0,0,0,y)
+ elseif tab == "Инструменты" then
+  local tools = {{"Fly","Полёт"},{"NoClip","Сквозь стены"},{"Invisible","Невидимость"},{"God","Режим бога"},{"Walkspeed","Скорость"},{"Jumppower","Прыжок"}}
+  local y = 0
+  for _,t in ipairs(tools) do
+   local row = Instance.new("Frame")
+   row.Size = UDim2.new(1,0,0,40)
+   row.Position = UDim2.new(0,0,0,y)
+   row.BackgroundTransparency = 1
+   row.Parent = contentContainer
+   local label = Instance.new("TextLabel")
+   label.Size = UDim2.new(0,150,1,0)
+   label.BackgroundTransparency = 1
+   label.Text = t[2]
+   label.TextColor3 = Color3.fromRGB(200,200,220)
+   label.TextXAlignment = Enum.TextXAlignment.Left
+   label.Font = Enum.Font.GothamMedium
+   label.TextScaled = true
+   label.Parent = row
+   local toggle = Instance.new("TextButton")
+   toggle.Size = UDim2.new(0,80,0,30)
+   toggle.Position = UDim2.new(1,-90,0.5,-15)
+   toggle.BackgroundColor3 = Color3.fromRGB(40,40,60)
+   toggle.Text = "Вкл"
+   toggle.TextColor3 = Color3.fromRGB(150,150,180)
+   toggle.TextScaled = true
+   toggle.Font = Enum.Font.GothamBold
+   toggle.BorderSizePixel = 0
+   toggle.Parent = row
+   local active = false
+   toggle.MouseButton1Click:Connect(function()
+    active = not active
+    toggle.Text = active and "Выкл" or "Вкл"
+    toggle.BackgroundColor3 = active and Color3.fromRGB(80,50,100) or Color3.fromRGB(40,40,60)
+    remoteCmd:FireServer(string.lower(t[1]), player.Name)
+   end)
+   y = y + 45
+  end
+ elseif tab == "Команды" then
+  local cmds = {{"kick","Кикнуть"},{"ban","Забанить"},{"tp","Телепорт"},{"bring","Призвать"},{"heal","Вылечить"},{"kill","Убить"},{"respawnall","Респавн всех"},{"freezeall","Заморозить всех"},{"unfreezeall","Разморозить"},{"spam","Спам предметов"},{"shutdown","Закрыть сервер"}}
+  local scroll = Instance.new("ScrollingFrame")
+  scroll.Size = UDim2.new(1,0,1,0)
+  scroll.BackgroundTransparency = 1
+  scroll.CanvasSize = UDim2.new(0,0,0,0)
+  scroll.ScrollBarThickness = 4
+  scroll.Parent = contentContainer
+  local y = 0
+  for _,c in ipairs(cmds) do
+   local row = Instance.new("Frame")
+   row.Size = UDim2.new(1,0,0,35)
+   row.Position = UDim2.new(0,0,0,y)
+   row.BackgroundTransparency = 1
+   row.Parent = scroll
+   local lbl = Instance.new("TextLabel")
+   lbl.Size = UDim2.new(0,120,1,0)
+   lbl.BackgroundTransparency = 1
+   lbl.Text = "/"..c[1]
+   lbl.TextColor3 = Color3.fromRGB(180,130,255)
+   lbl.TextXAlignment = Enum.TextXAlignment.Left
+   lbl.Font = Enum.Font.GothamMedium
+   lbl.TextScaled = true
+   lbl.Parent = row
+   local desc = Instance.new("TextLabel")
+   desc.Size = UDim2.new(1,-130,1,0)
+   desc.Position = UDim2.new(0,130,0,0)
+   desc.BackgroundTransparency = 1
+   desc.Text = c[2]
+   desc.TextColor3 = Color3.fromRGB(150,150,180)
+   desc.TextXAlignment = Enum.TextXAlignment.Left
+   desc.Font = Enum.Font.GothamMedium
+   desc.TextScaled = true
+   desc.Parent = row
+   y = y + 40
+  end
+  scroll.CanvasSize = UDim2.new(0,0,0,y)
+ elseif tab == "Сервер" then
+  local y = 0
+  local actions = {{"Респавн всех","respawnall"},{"Заморозить всех","freezeall"},{"Разморозить всех","unfreezeall"},{"Закрыть сервер","shutdown"}}
+  for _,a in ipairs(actions) do
+   local btn = Instance.new("TextButton")
+   btn.Size = UDim2.new(1,-20,0,45)
+   btn.Position = UDim2.new(0,10,0,y)
+   btn.BackgroundColor3 = Color3.fromRGB(40,30,60)
+   btn.BackgroundTransparency = 0.3
+   btn.Text = a[1]
+   btn.TextColor3 = Color3.fromRGB(200,200,220)
+   btn.TextScaled = true
+   btn.Font = Enum.Font.GothamBold
+   btn.BorderSizePixel = 0
+   btn.Parent = contentContainer
+   btn.MouseButton1Click:Connect(function() remoteCmd:FireServer(a[2]) end)
+   y = y + 55
+  end
+  local stats = Instance.new("TextLabel")
+  stats.Size = UDim2.new(1,-20,0,60)
+  stats.Position = UDim2.new(0,10,0,y+10)
+  stats.BackgroundTransparency = 1
+  stats.Text = "Игроков онлайн: "..#Players:GetPlayers().."\nВерсия: Nova Ultimate v2.0"
+  stats.TextColor3 = Color3.fromRGB(150,150,180)
+  stats.TextScaled = true
+  stats.Font = Enum.Font.GothamMedium
+  stats.Parent = contentContainer
+ end
+end
+
+UserInputService.InputBegan:Connect(function(input, gp)
+ if gp then return end
+ if input.KeyCode == Enum.KeyCode.M then
+  screenGui.Enabled = not screenGui.Enabled
+  if screenGui.Enabled then
+   updateContent(currentTab)
+   mainFrame.Position = UDim2.new(0.5,-225,0.5,-300)
+   mainFrame.BackgroundTransparency = 1
+   local tween = TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Position = UDim2.new(0.5,-225,0.5,-275), BackgroundTransparency = 0.15})
+   tween:Play()
+  end
+ end
+end)
+
+print("Nova Ultimate Client loaded")
+
+end
